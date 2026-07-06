@@ -1,17 +1,3 @@
-"""
-Juggware main runtime module.
-
-This file intentionally centralizes most of the application runtime so the loader,
-overlay, feature threads, and DearPyGui controls can share one process-wide state.
-The code is organized into these broad sections:
-1. Imports and platform/runtime bootstrap helpers.
-2. Constants and default configuration templates.
-3. Global runtime state containers.
-4. Feature-specific workers (ESP, aimbot, triggerbot, etc.).
-5. UI construction and callback handlers.
-6. Startup/teardown orchestration (main entry point).
-"""
-
 import dearpygui.dearpygui as dpg
 import urllib.request
 import ctypes
@@ -8360,14 +8346,14 @@ def get_cheat_version():
 
 def get_offsets_last_update():
     """
-    Fetch the last update time of the offsets GitHub repository.
+    Fetch the most recent edit date for the offsets folder in the Juggware GitHub repository.
     
     Returns:
         str: Formatted date/time string, or error message if fetch fails
     """
     try:
-        # GitHub API endpoint for repository commits
-        api_url = "https://api.github.com/repos/popsiclez/offsets/commits?per_page=1"
+        # GitHub API endpoint for commits affecting the offsets folder
+        api_url = "https://api.github.com/repos/Popsiclez1/Juggware/commits?path=offsets&per_page=1"
         
         # Create request with User-Agent header (required by GitHub API)
         req = urllib.request.Request(api_url)
@@ -8377,13 +8363,32 @@ def get_offsets_last_update():
         data = json.loads(response.read().decode('utf-8'))
         
         if data and len(data) > 0:
-            # Get commit date from first (most recent) commit
+            # Get commit date from the most recent commit touching the offsets folder
             commit_date_str = data[0]['commit']['committer']['date']
             # Parse ISO 8601 format: 2025-12-08T10:30:45Z
-            from datetime import datetime
+            from datetime import datetime, timedelta
+
             commit_date = datetime.strptime(commit_date_str, '%Y-%m-%dT%H:%M:%SZ')
+
+            # Convert UTC to US Eastern Time without requiring zoneinfo/tzdata.
+            def is_eastern_daylight_saving_time(dt: datetime) -> bool:
+                year = dt.year
+                second_sunday_march = datetime(year, 3, 1)
+                while second_sunday_march.weekday() != 6:
+                    second_sunday_march += timedelta(days=1)
+                second_sunday_march += timedelta(days=7)
+
+                first_sunday_november = datetime(year, 11, 1)
+                while first_sunday_november.weekday() != 6:
+                    first_sunday_november += timedelta(days=1)
+
+                return second_sunday_march <= dt < first_sunday_november
+
+            offset_hours = -4 if is_eastern_daylight_saving_time(commit_date) else -5
+            eastern_time = commit_date + timedelta(hours=offset_hours)
+
             # Format as readable string
-            return commit_date.strftime('%B %d, %Y at %I:%M %p UTC')
+            return eastern_time.strftime('%B %d, %Y at %I:%M %p ET')
         else:
             return "Unknown"
     except Exception as e:
