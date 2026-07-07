@@ -1,3 +1,17 @@
+"""
+Juggware main runtime module.
+
+This file intentionally centralizes most of the application runtime so the loader,
+overlay, feature threads, and DearPyGui controls can share one process-wide state.
+The code is organized into these broad sections:
+1. Imports and platform/runtime bootstrap helpers.
+2. Constants and default configuration templates.
+3. Global runtime state containers.
+4. Feature-specific workers (ESP, aimbot, triggerbot, etc.).
+5. UI construction and callback handlers.
+6. Startup/teardown orchestration (main entry point).
+"""
+
 import dearpygui.dearpygui as dpg
 import urllib.request
 import ctypes
@@ -7711,9 +7725,8 @@ def on_test_clicked():
     # Hide loader window immediately
     if drag_state.get("hwnd"):
         win32gui.ShowWindow(drag_state["hwnd"], win32con.SW_HIDE)
-    
-    app_state["switch_to_cheat"] = True
-    dpg.stop_dearpygui()
+
+    request_window_switch()
 
 
 def on_close_clicked():
@@ -13559,6 +13572,12 @@ def reset_drag_state():
     drag_state["hwnd"] = None
 
 
+def request_window_switch():
+    """Request a controlled transition from loader to cheat window."""
+    app_state["switch_to_cheat"] = True
+    app_state["pending_window_transition"] = True
+
+
 def run_window(window_type="loader"):
     """
     Run a DearPyGui window of the specified type.
@@ -13572,6 +13591,7 @@ def run_window(window_type="loader"):
     # Reset state
     reset_drag_state()
     app_state["switch_to_cheat"] = False
+    app_state["pending_window_transition"] = False
     
     # Get base app title (use cached if available)
     if app_state["app_title"] is None:
@@ -13686,6 +13706,13 @@ def run_window(window_type="loader"):
     last_config_files = set(get_available_configs()) if window_type == "cheat" else set()
     
     while dpg.is_dearpygui_running():
+        if app_state.get("pending_window_transition", False):
+            try:
+                dpg.stop_dearpygui()
+            except Exception:
+                pass
+            break
+
         # Initialize color pickers after several frames (workaround for DearPyGui bug)
         # We initialize multiple times to ensure it sticks
         if window_type == "cheat" and not color_pickers_initialized:
