@@ -3797,26 +3797,25 @@ def render_esp_frame(overlay, pm, client, settings):
             if settings.get('footstep_esp', False):
                 update_footstep_esp(pm, entity_pawn_addr, game_scene, local_player_team, entity_team, settings)
             
-            # Read head bone (bone 6) in one call - 12 bytes for X, Y, Z
-            head_bytes = pm.read_bytes(bone_matrix + 6 * 0x20, 12)
+            # Read head bone (bone 7) in one call - 12 bytes for X, Y, Z
+            head_bytes = pm.read_bytes(bone_matrix + 7 * 0x20, 12)
             headX, headY, headZ = struct.unpack('3f', head_bytes)
             headZ += 8  # Offset for head height
             
-            # Read neck bone (bone 5) for triggerbot radius calculation
-            neck_bytes = pm.read_bytes(bone_matrix + 5 * 0x20, 12)
+            # Read neck bone (bone 6) for triggerbot radius calculation
+            neck_bytes = pm.read_bytes(bone_matrix + 6 * 0x20, 12)
             neckX, neckY, neckZ = struct.unpack('3f', neck_bytes)
             
-            # Read leg bone Z (bone 28)
-            legZ = pm.read_float(bone_matrix + 28 * 0x20 + 0x8)
-            
-            # Convert to screen coordinates
+            # Read leg bone position (bone 28) for height projection
+            leg_bytes = pm.read_bytes(bone_matrix + 28 * 0x20, 12)
+            legX, legY, legZ = struct.unpack('3f', leg_bytes)
+
+            # Convert head and leg positions to screen coordinates for ESP geometry
             head_pos = w2s(view_matrix, headX, headY, headZ, width, height)
-            if head_pos[0] == -999:
+            leg_pos = w2s(view_matrix, legX, legY, legZ, width, height)
+            if head_pos[0] == -999 or leg_pos[0] == -999:
                 continue
-            
-            leg_pos = w2s(view_matrix, headX, headY, legZ, width, height)
-            
-            # Calculate box dimensions
+
             # Start with legacy head/leg heuristic, then replace with projected player bounds when available.
             box_top_y = min(head_pos[1], leg_pos[1])
             box_bottom_y = max(head_pos[1], leg_pos[1])
@@ -4131,21 +4130,24 @@ def render_esp_frame(overlay, pm, client, settings):
                             overlay.draw_filled_rect_brush(armor_x, box_top, vertical_thickness, box_h, 'health_bg')
                             overlay.draw_filled_rect_brush(armor_x, box_bottom - armor_height, vertical_thickness, armor_height, 'armor_blue')
             
-            # Draw head hitbox circle
+            # Draw head hitbox sphere
             if settings.get('draw_head_hitbox', False) and not (settings.get('hide_spotted_players', False) and is_spotted):
-                hitbox_data = calculate_head_hitbox_screen(
-                    view_matrix,
-                    width,
-                    height,
-                    (headX, headY, headZ - 8),
-                    (neckX, neckY, neckZ),
-                    (local_origin_x, local_origin_y, local_origin_z),
-                    (headX, headY, legZ)
+                head_hitbox_color = settings.get('head_hitbox_color', (255, 0, 0))
+                world_hitbox = get_head_hitbox_world_sphere(
+                    (headX, headY, headZ),
+                    (neckX, neckY, neckZ)
                 )
-                if hitbox_data:
-                    hitbox_center_x, hitbox_center_y, radius = hitbox_data
-                    head_hitbox_color = settings.get('head_hitbox_color', (255, 0, 0))
-                    overlay.draw_circle_outline_rgb(hitbox_center_x, hitbox_center_y, radius, head_hitbox_color, 2.0, 32)
+                if world_hitbox:
+                    sphere_center, sphere_radius_world = world_hitbox
+                    rings = generate_projected_sphere_rings(
+                        view_matrix,
+                        width,
+                        height,
+                        sphere_center,
+                        sphere_radius_world,
+                        segments=28
+                    )
+                    draw_projected_sphere(overlay, rings, head_hitbox_color, 2.0)
             
             # Track vertical offset for text stacking above head
             # Adjust based on health position and type to avoid overlapping
@@ -5368,8 +5370,8 @@ def render_aimbot_snaplines(overlay, pm, client, settings):
         
         # Get target bone
         target_bone_name = settings.get('aimbot_target_bone', 'Head')
-        bone_map = {'Head': 6, 'Neck': 5, 'Chest': 4, 'Pelvis': 0}
-        target_bone_id = bone_map.get(target_bone_name, 6)
+        bone_map = {'Head': 7, 'Neck': 6, 'Chest': 4, 'Pelvis': 0}
+        target_bone_id = bone_map.get(target_bone_name, 7)
         
         # Build target list
         target_list = []
@@ -5611,8 +5613,8 @@ def render_acs_deadzone_lines(overlay, pm, client, settings):
                     
                     # Get target bone ID
                     target_bone_name = settings.get("acs_target_bone", "Head")
-                    bone_map = {"Head": 6, "Neck": 5, "Chest": 4, "Pelvis": 0}
-                    target_bone_id = bone_map.get(target_bone_name, 6)
+                    bone_map = {"Head": 7, "Neck": 6, "Chest": 4, "Pelvis": 0}
+                    target_bone_id = bone_map.get(target_bone_name, 7)
                     
                     # Read bone position
                     bone_x = pm.read_float(bone_matrix + target_bone_id * 0x20)
@@ -6026,49 +6028,257 @@ def w2s_aimbot(view_matrix, x, y, z, width, height):
     return (screen_x, screen_y)
 
 
+def get_head_hitbox_world_sphere(head_xyz, neck_xyz):
+    """Return world-space sphere center and radius for the head hitbox."""
+    head_neck_dist = math.sqrt(
+        (head_xyz[0] - neck_xyz[0]) ** 2 +
+        (head_xyz[1] - neck_xyz[1]) ** 2 +
+        (head_xyz[2] - neck_xyz[2]) ** 2
+    )
+    if head_neck_dist < 1.0:
+        return None
+
+    sphere_center = (
+        (head_xyz[0] + neck_xyz[0]) * 0.5,
+        (head_xyz[1] + neck_xyz[1]) * 0.5,
+        (head_xyz[2] + neck_xyz[2]) * 0.5,
+    )
+
+    # Offset the hitbox further forward in the player's facing direction.
+    # Use the horizontal component of the head-to-neck vector for facing direction.
+    forward_x = head_xyz[0] - neck_xyz[0]
+    forward_y = head_xyz[1] - neck_xyz[1]
+    forward_horiz = math.hypot(forward_x, forward_y)
+    if forward_horiz > 0.001:
+        forward_dir_x = forward_x / forward_horiz
+        forward_dir_y = forward_y / forward_horiz
+        forward_offset = min(8.0, head_neck_dist * 0.3)
+        sphere_center = (
+            sphere_center[0] + forward_dir_x * forward_offset,
+            sphere_center[1] + forward_dir_y * forward_offset,
+            sphere_center[2],
+        )
+
+    sphere_radius_world = max(4.0, head_neck_dist * 0.55)
+    return sphere_center, sphere_radius_world
+
+
+def project_sphere_screen_radius(view_matrix, width, height, center_xyz, world_radius):
+    """Project a world-space sphere radius into screen-space pixels."""
+    center_screen = w2s_aimbot(view_matrix, center_xyz[0], center_xyz[1], center_xyz[2], width, height)
+    if center_screen[0] == -999:
+        return None
+
+    offsets = [
+        (world_radius, 0.0, 0.0),
+        (0.0, world_radius, 0.0),
+        (0.0, 0.0, world_radius),
+    ]
+    radii = []
+    for dx, dy, dz in offsets:
+        sample_screen = w2s_aimbot(
+            view_matrix,
+            center_xyz[0] + dx,
+            center_xyz[1] + dy,
+            center_xyz[2] + dz,
+            width,
+            height,
+        )
+        if sample_screen[0] != -999:
+            radii.append(abs(sample_screen[0] - center_screen[0]))
+            radii.append(abs(sample_screen[1] - center_screen[1]))
+
+    if not radii:
+        return None
+    return max(radii)
+
+
+def calculate_head_hitbox_screen_circle(view_matrix, width, height, head_xyz, neck_xyz):
+    """Return the screen-space center and radius for the drawn head hitbox sphere."""
+    world_data = get_head_hitbox_world_sphere(head_xyz, neck_xyz)
+    if not world_data:
+        return None
+
+    sphere_center, sphere_radius_world = world_data
+    screen_center = w2s_aimbot(
+        view_matrix,
+        sphere_center[0],
+        sphere_center[1],
+        sphere_center[2],
+        width,
+        height,
+    )
+    if screen_center[0] == -999:
+        return None
+
+    screen_radius = project_sphere_screen_radius(
+        view_matrix,
+        width,
+        height,
+        sphere_center,
+        sphere_radius_world,
+    )
+    if screen_radius is None or screen_radius < 2.0:
+        return None
+
+    return screen_center[0], screen_center[1], screen_radius
+
+
+def generate_projected_sphere_rings(view_matrix, width, height, center_xyz, world_radius, segments=24):
+    """Generate screen-space rings for a projected world-space sphere."""
+    rings = []
+    two_pi = 2.0 * math.pi
+
+    for plane in ['xy', 'xz', 'yz']:
+        ring = []
+        for i in range(segments + 1):
+            theta = two_pi * i / segments
+            if plane == 'xy':
+                x = center_xyz[0] + world_radius * math.cos(theta)
+                y = center_xyz[1] + world_radius * math.sin(theta)
+                z = center_xyz[2]
+            elif plane == 'xz':
+                x = center_xyz[0] + world_radius * math.cos(theta)
+                y = center_xyz[1]
+                z = center_xyz[2] + world_radius * math.sin(theta)
+            else:  # yz
+                x = center_xyz[0]
+                y = center_xyz[1] + world_radius * math.cos(theta)
+                z = center_xyz[2] + world_radius * math.sin(theta)
+
+            screen_pt = w2s_aimbot(view_matrix, x, y, z, width, height)
+            if screen_pt[0] == -999:
+                ring = []
+                break
+            ring.append(screen_pt)
+
+        if ring:
+            rings.append(ring)
+
+    return rings if rings else None
+
+
+def draw_projected_sphere(overlay, rings, rgb_tuple, thickness=2.0):
+    """Draw projected sphere rings using line segments."""
+    if not rings:
+        return
+
+    for ring in rings:
+        for i in range(len(ring) - 1):
+            overlay.draw_line_rgb(
+                ring[i][0], ring[i][1],
+                ring[i + 1][0], ring[i + 1][1],
+                rgb_tuple,
+                thickness
+            )
+
+
 def calculate_head_hitbox_screen(view_matrix, width, height, head_xyz, neck_xyz, local_xyz, leg_xyz=None):
     """
-    Calculate a consistent screen-space head hitbox circle.
+    Calculate a world-space 3D head sphere and project it to screen-space.
 
     Returns:
         tuple: (center_x, center_y, radius) or None if projection fails.
     """
-    # Apply head level adjustment
-    adjusted_head_xyz = (head_xyz[0], head_xyz[1], head_xyz[2] + 2.0)
-    
-    head_screen = w2s_aimbot(view_matrix, adjusted_head_xyz[0], adjusted_head_xyz[1], adjusted_head_xyz[2], width, height)
-    neck_screen = w2s_aimbot(view_matrix, neck_xyz[0], neck_xyz[1], neck_xyz[2], width, height)
-    if head_screen[0] == -999 or neck_screen[0] == -999:
+    world_data = get_head_hitbox_world_sphere(head_xyz, neck_xyz)
+    if not world_data:
         return None
 
-    head_neck_pixels = math.hypot(head_screen[0] - neck_screen[0], head_screen[1] - neck_screen[1])
-    if head_neck_pixels < 1.0:
+    sphere_center, sphere_radius_world = world_data
+    screen_center = w2s_aimbot(view_matrix, sphere_center[0], sphere_center[1], sphere_center[2], width, height)
+    if screen_center[0] == -999:
         return None
 
-    player_height_pixels = 0.0
+    screen_radius = project_sphere_screen_radius(view_matrix, width, height, sphere_center, sphere_radius_world)
+    if screen_radius is None or screen_radius < 2.0:
+        return None
+
     if leg_xyz is not None:
         leg_screen = w2s_aimbot(view_matrix, leg_xyz[0], leg_xyz[1], leg_xyz[2], width, height)
         if leg_screen[0] != -999:
-            player_height_pixels = abs(leg_screen[1] - head_screen[1])
+            player_height_pixels = abs(leg_screen[1] - screen_center[1])
+            screen_radius = max(screen_radius, player_height_pixels * 0.08)
 
     distance_3d = math.sqrt(
         (head_xyz[0] - local_xyz[0]) ** 2 +
         (head_xyz[1] - local_xyz[1]) ** 2 +
         (head_xyz[2] - local_xyz[2]) ** 2
     )
+    distance_fallback = max(3.5, 60.0 / max(1.0, distance_3d / 40.0))
+    screen_radius = max(screen_radius, distance_fallback)
+    screen_radius = min(68.0, max(4.0, screen_radius))
 
-    # Primary radius from projected anatomy, with distance fallback for far targets.
-    radius_from_bones = head_neck_pixels * 0.95
-    radius_from_height = player_height_pixels * 0.11 if player_height_pixels > 0 else 0.0
-    distance_fallback = max(5.5, 90.0 / max(1.0, distance_3d / 25.0))
-    radius = max(radius_from_bones, radius_from_height, distance_fallback * 0.65)
-    radius = min(72.0, max(6.0, radius))
+    return screen_center[0], screen_center[1], screen_radius
 
-    # Shift center up by a fraction of neck-head span for better alignment with skull center.
-    center_y_offset = max(2.0, head_neck_pixels * 0.24)
-    center_x = head_screen[0]
-    center_y = head_screen[1] - center_y_offset
-    return center_x, center_y, radius
+
+def calculate_head_hitbox_3d_corners(view_matrix, width, height, head_xyz, neck_xyz):
+    """
+    Build a 3D head hitbox cube and project its corners to screen space.
+
+    Returns:
+        list: 8 tuples of screen-space coordinates or None if projection fails.
+    """
+    head_screen = w2s_aimbot(view_matrix, head_xyz[0], head_xyz[1], head_xyz[2], width, height)
+    neck_screen = w2s_aimbot(view_matrix, neck_xyz[0], neck_xyz[1], neck_xyz[2], width, height)
+    if head_screen[0] == -999 or neck_screen[0] == -999:
+        return None
+
+    head_neck_dist = math.sqrt(
+        (head_xyz[0] - neck_xyz[0]) ** 2 +
+        (head_xyz[1] - neck_xyz[1]) ** 2 +
+        (head_xyz[2] - neck_xyz[2]) ** 2
+    )
+    if head_neck_dist < 1.0:
+        return None
+
+    # Center the box around the midpoint of head and neck.
+    center_x = (head_xyz[0] + neck_xyz[0]) * 0.5
+    center_y = (head_xyz[1] + neck_xyz[1]) * 0.5
+    center_z = (head_xyz[2] + neck_xyz[2]) * 0.5
+
+    half_width = head_neck_dist * 0.35
+    half_depth = head_neck_dist * 0.35
+    half_height = head_neck_dist * 0.55
+
+    corners_world = [
+        (center_x - half_width, center_y - half_depth, center_z - half_height),
+        (center_x + half_width, center_y - half_depth, center_z - half_height),
+        (center_x + half_width, center_y + half_depth, center_z - half_height),
+        (center_x - half_width, center_y + half_depth, center_z - half_height),
+        (center_x - half_width, center_y - half_depth, center_z + half_height),
+        (center_x + half_width, center_y - half_depth, center_z + half_height),
+        (center_x + half_width, center_y + half_depth, center_z + half_height),
+        (center_x - half_width, center_y + half_depth, center_z + half_height),
+    ]
+
+    projected_corners = []
+    for x, y, z in corners_world:
+        screen_pt = w2s_aimbot(view_matrix, x, y, z, width, height)
+        if screen_pt[0] == -999:
+            return None
+        projected_corners.append(screen_pt)
+
+    return projected_corners
+
+
+def draw_projected_3d_box(overlay, corners, rgb_tuple, thickness=2.0):
+    """Draw a projected 3D box from 8 screen-space corner points."""
+    if not corners or len(corners) != 8:
+        return
+
+    edges = [
+        (0, 1), (1, 2), (2, 3), (3, 0),
+        (4, 5), (5, 6), (6, 7), (7, 4),
+        (0, 4), (1, 5), (2, 6), (3, 7),
+    ]
+
+    for start, end in edges:
+        overlay.draw_line_rgb(
+            corners[start][0], corners[start][1],
+            corners[end][0], corners[end][1],
+            rgb_tuple,
+            thickness
+        )
 
 
 def aimbot_thread():
@@ -6611,22 +6821,20 @@ def triggerbot_thread():
                             time.sleep(0.001)
                             continue
                         
-                        # Read head bone position (bone 6)
-                        head_x = pm.read_float(bone_matrix + 6 * 0x20)
-                        head_y = pm.read_float(bone_matrix + 6 * 0x20 + 0x4)
-                        head_z = pm.read_float(bone_matrix + 6 * 0x20 + 0x8)
-                        
-                        # Apply head level adjustment
-                        head_z += 2.0
-                        
-                        # Read neck bone position (bone 5) for head size calculation
-                        neck_x = pm.read_float(bone_matrix + 5 * 0x20)
-                        neck_y = pm.read_float(bone_matrix + 5 * 0x20 + 0x4)
-                        neck_z = pm.read_float(bone_matrix + 5 * 0x20 + 0x8)
-                        
+                        # Read head bone position (bone 7)
+                        head_x = pm.read_float(bone_matrix + 7 * 0x20)
+                        head_y = pm.read_float(bone_matrix + 7 * 0x20 + 0x4)
+                        head_z = pm.read_float(bone_matrix + 7 * 0x20 + 0x8)
+                        head_z += 8  # Adjust for actual head height
+
+                        # Read neck bone position (bone 6)
+                        neck_bytes = pm.read_bytes(bone_matrix + 6 * 0x20, 12)
+                        neck_x, neck_y, neck_z = struct.unpack('3f', neck_bytes)
+
                         # Read leg position for bounding box calculation (bone 28)
-                        leg_z = pm.read_float(bone_matrix + 28 * 0x20 + 0x8)
-                        
+                        leg_bytes = pm.read_bytes(bone_matrix + 28 * 0x20, 12)
+                        leg_x, leg_y, leg_z = struct.unpack('3f', leg_bytes)
+
                         # Get local player position for distance calculation
                         local_game_scene = pm.read_longlong(local_player_pawn + m_pGameSceneNode)
                         local_x = pm.read_float(local_game_scene + m_vecAbsOrigin)
@@ -6636,34 +6844,33 @@ def triggerbot_thread():
                         # Convert to screen coordinates
                         head_pos = w2s_aimbot(view_matrix, head_x, head_y, head_z, screen_width, screen_height)
                         neck_pos = w2s_aimbot(view_matrix, neck_x, neck_y, neck_z, screen_width, screen_height)
-                        leg_pos = w2s_aimbot(view_matrix, head_x, head_y, leg_z, screen_width, screen_height)
+                        leg_pos = w2s_aimbot(view_matrix, leg_x, leg_y, leg_z, screen_width, screen_height)
                         
                         if head_pos[0] == -999 or neck_pos[0] == -999 or leg_pos[0] == -999:
                             first_shot_pending = True
                             time.sleep(0.001)
                             continue
                         
-                        hitbox_data = calculate_head_hitbox_screen(
+                        head_circle = calculate_head_hitbox_screen_circle(
                             view_matrix,
                             screen_width,
                             screen_height,
                             (head_x, head_y, head_z),
                             (neck_x, neck_y, neck_z),
-                            (local_x, local_y, local_z),
-                            (head_x, head_y, leg_z)
                         )
-                        if not hitbox_data:
+                        if not head_circle:
                             first_shot_pending = True
                             time.sleep(0.001)
                             continue
 
-                        head_screen_x, head_screen_y, head_hitbox_radius = hitbox_data
-                        
-                        # Check if crosshair is within head hitbox circle
-                        distance_to_head = math.sqrt((crosshair_x - head_screen_x) ** 2 + (crosshair_y - head_screen_y) ** 2)
-                        
+                        head_screen_x, head_screen_y, head_hitbox_radius = head_circle
+
+                        # Check if crosshair is within the drawn head hitbox circle
+                        distance_to_head = math.sqrt(
+                            (crosshair_x - head_screen_x) ** 2 +
+                            (crosshair_y - head_screen_y) ** 2
+                        )
                         if distance_to_head > head_hitbox_radius:
-                            # Crosshair not on head, skip
                             first_shot_pending = True
                             time.sleep(0.001)
                             continue
@@ -8715,6 +8922,12 @@ def create_changelog_tab():
     Create the Changelog tab content.
     """
     with dpg.tab(label="Changelog"):
+        dpg.add_separator()
+        dpg.add_text("V1.1:")
+        dpg.add_text("- Updated triggerbot head only mode heat detection")
+        dpg.add_text(" - Head hitbox ESP is now 3d and more accurate")
+        dpg.add_text(" - Changed offset update date to eastern time")
+        dpg.add_text(" - Added nigger hitsound")
         dpg.add_separator()
         dpg.add_text("V1.0:")
         dpg.add_separator()
