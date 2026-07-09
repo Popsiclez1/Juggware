@@ -1,17 +1,5 @@
-"""
-Juggware main runtime module.
-
-This file intentionally centralizes most of the application runtime so the loader,
-overlay, feature threads, and DearPyGui controls can share one process-wide state.
-The code is organized into these broad sections:
-1. Imports and platform/runtime bootstrap helpers.
-2. Constants and default configuration templates.
-3. Global runtime state containers.
-4. Feature-specific workers (ESP, aimbot, triggerbot, etc.).
-5. UI construction and callback handlers.
-6. Startup/teardown orchestration (main entry point).
-"""
-
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import dearpygui.dearpygui as dpg
 import urllib.request
 import ctypes
@@ -23,7 +11,6 @@ import win32process
 import winsound
 import time
 import psutil
-import os
 import shutil
 import atexit
 import requests
@@ -32,6 +19,7 @@ import subprocess
 import threading
 import json
 import math
+import random
 import colorsys
 import pymem
 import pymem.process
@@ -1248,6 +1236,7 @@ pBulletServicesOffset = None
 m_totalHits = None
 m_iItemDefinitionIndex = None
 
+
 # Bomb offsets
 m_flTimerLength = None
 m_flDefuseLength = None
@@ -2122,7 +2111,7 @@ def apply_config_to_ui():
         # Triggerbot
         if triggerbot_state.get("settings"):
             triggerbot_state["settings"].update(get_current_triggerbot_settings())
-        
+
         # ACS (Aim Correction System)
         if acs_state.get("settings"):
             acs_state["settings"].update(Active_Config)
@@ -2207,7 +2196,7 @@ def apply_config_to_ui():
         # Update FOV changer state settings
         if fov_changer_state.get("settings"):
             fov_changer_state["settings"].update(Active_Config)
-        
+
         # === UPDATE KEYBIND BUTTON LABELS ===
         keybind_button_mappings = {
             "btn_bind_menu_toggle_cheat": "menu_toggle_key",
@@ -2370,6 +2359,7 @@ def on_bhop_toggle(sender, value):
         stop_bhop_thread()
     
     debug_log(f"Bhop {'enabled' if value else 'disabled'}", "INFO")
+
 
 
 def cycle_triggerbot_preset(direction):
@@ -6279,6 +6269,7 @@ def draw_projected_3d_box(overlay, corners, rgb_tuple, thickness=2.0):
             rgb_tuple,
             thickness
         )
+
 
 
 def aimbot_thread():
@@ -13349,6 +13340,8 @@ def create_settings_tab_cheat():
                     dpg.add_text("Target enemies only or include teammates")
                 ALL_TOOLTIP_TAGS.append("tooltip_targeting")
                 
+                dpg.add_separator()
+
                 dpg.add_separator()
                 
                 # Anti Flash toggle
