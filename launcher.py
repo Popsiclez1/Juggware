@@ -8,11 +8,10 @@ import time
 import urllib.request
 
 # Launcher constants
-LAUNCHER_VERSION = "1.1"
+LAUNCHER_VERSION = "1.2"
 LAUNCHER_TITLE = "LAUNCHER"
 VERSION_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/LauncherVersion"
 MAIN_SCRIPT_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/main.py"
-LOCAL_MAIN_FILENAME = "main.py"
 SUPPORTED_PYTHON_MAJOR = 3
 SUPPORTED_PYTHON_MINORS = {11}
 
@@ -134,16 +133,11 @@ def download_main_script(script_path):
 
 
 def resolve_main_script_path(launcher_dir):
-    """Prefer local main.py next to launcher; fallback to downloaded temp copy."""
-    local_main = os.path.join(launcher_dir, LOCAL_MAIN_FILENAME)
-    if os.path.exists(local_main):
-        print(f"[LAUNCHER] Using local script: {local_main}")
-        return local_main, False
-
+    """Always use the downloaded temp copy of main.py."""
     script_path = os.path.join(TEMP_DIR, 'main.py')
     add_temp_file(script_path)
     download_main_script(script_path)
-    print(f"[LAUNCHER] Using downloaded script: {script_path}")
+    print("[LAUNCHER] Using downloaded script.")
     return script_path, True
 
 
@@ -182,19 +176,16 @@ from OpenGL.GL import *
 def launch_main_script(python_exe, script_path, launcher_dir, mode=1):
     try:
         if mode == 2:
-            # Use a single command line so cmd.exe parses quoted paths correctly.
-            cmd_line = f'cmd.exe /k ""{python_exe}" "{script_path}""'
-            process = subprocess.Popen(
-                cmd_line,
+            subprocess.Popen(
+                [python_exe, script_path],
                 cwd=launcher_dir,
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
                 text=True,
             )
-            print("[LAUNCHER] Debug mode: launched cheat in new console window.")
-            print("[LAUNCHER] Waiting for console window to close...")
-            exit_code = process.wait()
-            print(f"[LAUNCHER] Debug console closed (code: {exit_code}).")
-            return
+            temp_files.discard(script_path)
+            print("[LAUNCHER] Debug mode: launched cheat in a separate console window.")
+            print("[LAUNCHER] Closing launcher window.")
+            os._exit(0)
 
         process = subprocess.Popen(
             [python_exe, script_path],
