@@ -273,6 +273,16 @@ TRIGGERBOT_WEAPON_PRESETS = [
     "Deagle", "Dual Berettas", "Five-SeveN", "Glock-18", "USP-S", "P2000", "P250", "Tec-9", "CZ75-Auto", "R8 Revolver"
 ]
 
+# Recoil weapon presets (reuse same preset list as triggerbot)
+RECOIL_WEAPON_PRESETS = TRIGGERBOT_WEAPON_PRESETS[:]
+
+# Default recoil settings for each preset
+DEFAULT_RECOIL_SETTINGS = {
+    "recoil_enabled": False,
+    "recoil_vert_strength": 0.0,
+    "recoil_smoothness": 3.0,
+}
+
 # Default triggerbot settings for each preset
 DEFAULT_TRIGGERBOT_SETTINGS = {
     "triggerbot_enabled": False,
@@ -280,7 +290,8 @@ DEFAULT_TRIGGERBOT_SETTINGS = {
     "triggerbot_between_shots_delay": 30,
     "triggerbot_burst_mode": False,
     "triggerbot_burst_shots": 3,
-    "triggerbot_head_only": False
+    "triggerbot_head_only": False,
+    "triggerbot_dont_shoot_while_moving": False,
 }
 
 # =============================================================================
@@ -321,8 +332,6 @@ Default_Config = {
     "team_skeleton_color": (255, 255, 255),  # White for team skeleton
     # ESP Colors - Head Hitbox
     "head_hitbox_color": (255, 0, 0),  # Red for head hitbox circle
-    # Bomb ESP
-    "bomb_esp": True,                        # Show planted bomb info
     # Footstep ESP
     "footstep_esp": False,                   # Show footstep rings around enemies making noise
     "footstep_esp_color": (255, 255, 255),     # White color for footstep rings
@@ -408,8 +417,12 @@ Default_Config = {
     "fps_cap_value": 144,                   # FPS cap value
     # Triggerbot
     "current_triggerbot_preset": "All weapons",  # Currently selected weapon preset
+    "triggerbot_auto_weapon_preset": False,  # Auto-select preset based on local player's current weapon
     "triggerbot_presets": {},               # Will be populated with default settings for each preset
-    "favorite_triggerbot_presets": [],      # List of favorite preset names
+    # Recoil control
+    "current_recoil_preset": "All weapons",
+    "recoil_auto_weapon_preset": False,
+    "recoil_presets": {},
     # Auto Crosshair Placement (ACS)
     "acs_enabled": False,                   # Enable auto crosshair placement
     "acs_target_bone": "Head",              # Target bone (Head, Neck, Chest, Pelvis)
@@ -425,7 +438,7 @@ Default_Config = {
     "hide_on_tabout": True,                 # Hide overlay and menu when tabbing out of CS2
     "show_tooltips": True,               # Show tooltips on hover
     "show_status_labels": True,             # Show feature status labels in overlay
-    "show_triggerbot_preset_list": False,   # Show cycling preset list under triggerbot status
+
     "show_overlay_fps": True,               # Show overlay FPS counter in overlay
     # Camera FOV Changer
     "fov_changer_enabled": False,           # Enable FOV modification
@@ -442,6 +455,10 @@ Default_Config = {
 # Initialize triggerbot presets with default settings
 for preset in TRIGGERBOT_WEAPON_PRESETS:
     Default_Config["triggerbot_presets"][preset] = DEFAULT_TRIGGERBOT_SETTINGS.copy()
+
+# Initialize recoil presets with default settings
+for preset in RECOIL_WEAPON_PRESETS:
+    Default_Config["recoil_presets"][preset] = DEFAULT_RECOIL_SETTINGS.copy()
 
 # =============================================================================
 # UI COLORWAY PRESETS
@@ -1105,8 +1122,6 @@ Keybinds_Config = {
     "bhop_key": "space",  # Key to activate bunny hop (hold)
     "aimbot_toggle_key": "",  # Key to toggle aimbot on/off
     "anti_afk_toggle_key": "",  # Key to toggle anti-AFK on/off
-    "cycle_triggerbot_presets_forwards_key": "",  # Key to cycle through triggerbot presets forwards
-    "cycle_triggerbot_presets_backwards_key": "",  # Key to cycle through triggerbot presets backwards
 }
 
 # Default keybinds configuration for reset functionality
@@ -1193,9 +1208,8 @@ dwEntityList = None
 dwLocalPlayerPawn = None
 dwLocalPlayerController = None
 dwViewMatrix = None
-dwPlantedC4 = None
+dwWeaponC4 = None
 dwSensitivity = None
-dwSensitivity_sensitivity = None
 dwForceJump = None
 
 # Entity field offsets
@@ -1221,6 +1235,13 @@ m_pCameraServices = None
 m_vOldOrigin = None
 m_pWeaponServices = None
 
+# AimPunch / Recoil offsets
+m_pAimPunchServices = None
+m_predictableBaseAngle = None
+m_unpredictableBaseAngle = None
+m_unpredictableBaseTick = None
+m_iShotsFired = None
+
 # Scene node offsets
 m_vecAbsOrigin = None
 m_vecOrigin = None
@@ -1241,6 +1262,7 @@ m_iItemDefinitionIndex = None
 m_flTimerLength = None
 m_flDefuseLength = None
 m_bBeingDefused = None
+m_bBombTicking = None
 m_nBombSite = None
 
 # Spotted state offsets
@@ -1287,6 +1309,19 @@ triggerbot_state = {
     "settings": None,           # Current triggerbot settings
     "mouse": None,              # pynput mouse controller
 }
+
+
+# Recoil State
+recoil_state = {
+    "running": False,
+    "thread": None,
+    "settings": None,
+    "prev_aimpunch_x": 0.0,
+    "prev_aimpunch_y": 0.0,
+    "last_shots_fired": 0,
+}
+
+
 
 # Anti Flash State
 anti_flash_state = {
@@ -1351,10 +1386,6 @@ debug_output = {
     "messages": [],            # List of (timestamp, message) tuples
     "scroll_to_bottom": True,  # Auto-scroll to newest message
 }
-
-# Bomb ESP timing state
-BombPlantedTime = 0
-BombDefusedTime = 0
 
 # =============================================================================
 # KEYBIND SYSTEM - Virtual Key Code Mapping
@@ -1707,14 +1738,9 @@ def load_config_from_file(config_name):
             for preset in TRIGGERBOT_WEAPON_PRESETS:
                 if preset not in Active_Config["triggerbot_presets"]:
                     Active_Config["triggerbot_presets"][preset] = DEFAULT_TRIGGERBOT_SETTINGS.copy()
-            
-            # Validate favorite_triggerbot_presets
-            favorites = Active_Config.get("favorite_triggerbot_presets", [])
-            if not isinstance(favorites, list):
-                favorites = []
-            # Filter to only valid presets
-            favorites = [f for f in favorites if f in TRIGGERBOT_WEAPON_PRESETS]
-            Active_Config["favorite_triggerbot_presets"] = favorites
+                else:
+                    for key, default_value in DEFAULT_TRIGGERBOT_SETTINGS.items():
+                        Active_Config["triggerbot_presets"][preset].setdefault(key, default_value)
             
             debug_log(f"Settings loaded from: {config_name}.json", "SUCCESS")
             success = True
@@ -1734,11 +1760,6 @@ def load_config_from_file(config_name):
             Keybinds_Config = Default_Keybinds_Config.copy()
             Keybinds_Config.update(loaded_keybinds)
             
-            # Backward compatibility: migrate old cycle keybind to forwards
-            if "cycle_favorite_triggerbot_presets_key" in Keybinds_Config and "cycle_triggerbot_presets_forwards_key" not in Keybinds_Config:
-                Keybinds_Config["cycle_triggerbot_presets_forwards_key"] = Keybinds_Config["cycle_favorite_triggerbot_presets_key"]
-                Keybinds_Config.pop("cycle_favorite_triggerbot_presets_key", None)
-            
             debug_log(f"Keybinds loaded from: {config_name}.json", "SUCCESS")
             keybinds_loaded = True
         except Exception as e:
@@ -1749,11 +1770,6 @@ def load_config_from_file(config_name):
         try:
             Keybinds_Config = Default_Keybinds_Config.copy()
             Keybinds_Config.update(embedded_keybinds)
-            
-            # Backward compatibility: migrate old cycle keybind to forwards
-            if "cycle_favorite_triggerbot_presets_key" in Keybinds_Config and "cycle_triggerbot_presets_forwards_key" not in Keybinds_Config:
-                Keybinds_Config["cycle_triggerbot_presets_forwards_key"] = Keybinds_Config["cycle_favorite_triggerbot_presets_key"]
-                Keybinds_Config.pop("cycle_favorite_triggerbot_presets_key", None)
             
             debug_log(f"Embedded keybinds loaded from settings file: {config_name}.json", "SUCCESS")
             keybinds_loaded = True
@@ -1788,13 +1804,8 @@ def get_triggerbot_settings_for_weapon(weapon_name):
 
 
 def get_triggerbot_dropdown_items():
-    """Get the list of items for the triggerbot preset dropdown, with favorites first."""
-    favorites = Active_Config.get("favorite_triggerbot_presets", [])
-    all_presets = TRIGGERBOT_WEAPON_PRESETS[:]
-    
-    # Remove favorites from all_presets and put them first
-    non_favorites = [p for p in all_presets if p not in favorites]
-    return favorites + non_favorites
+    """Get the list of items for the triggerbot preset dropdown."""
+    return TRIGGERBOT_WEAPON_PRESETS[:]
 
 
 def set_triggerbot_setting(key, value):
@@ -1821,6 +1832,7 @@ def update_triggerbot_ui_from_preset():
         dpg.set_value("chk_triggerbot_burst_mode", settings.get("triggerbot_burst_mode", False))
         dpg.set_value("slider_triggerbot_burst_shots", settings.get("triggerbot_burst_shots", 3))
         dpg.set_value("chk_triggerbot_head_only", settings.get("triggerbot_head_only", False))
+        dpg.set_value("chk_triggerbot_dont_shoot_while_moving", settings.get("triggerbot_dont_shoot_while_moving", False))
         
         # Show/hide burst shots based on burst mode
         burst_mode = settings.get("triggerbot_burst_mode", False)
@@ -1831,24 +1843,148 @@ def update_triggerbot_ui_from_preset():
         pass
 
 
-def update_triggerbot_favorite_checkbox():
-    """Update the favorite checkbox state based on current preset."""
-    current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
-    favorites = Active_Config.get("favorite_triggerbot_presets", [])
-    is_favorite = current_preset in favorites
-    try:
-        dpg.set_value("chk_triggerbot_favorite", is_favorite)
-    except:
-        pass
-
-
 def update_triggerbot_dropdown_items():
-    """Update the triggerbot preset dropdown items with favorites first."""
+    """Update the triggerbot preset dropdown items."""
     items = get_triggerbot_dropdown_items()
     try:
         dpg.configure_item("combo_triggerbot_preset", items=items)
     except:
         pass
+
+
+def get_current_recoil_settings():
+    """Get the recoil settings for the currently selected preset."""
+    preset = Active_Config.get("current_recoil_preset", "All weapons")
+    return Active_Config["recoil_presets"].get(preset, DEFAULT_RECOIL_SETTINGS.copy())
+
+
+def get_recoil_settings_for_weapon(weapon_name):
+    """Get the recoil settings for a specific weapon, falling back to 'All weapons'."""
+    if weapon_name in Active_Config["recoil_presets"]:
+        return Active_Config["recoil_presets"][weapon_name]
+    else:
+        return Active_Config["recoil_presets"].get("All weapons", DEFAULT_RECOIL_SETTINGS.copy())
+
+
+def get_recoil_dropdown_items():
+    """Get the list of items for the recoil preset dropdown."""
+    return RECOIL_WEAPON_PRESETS[:]
+
+
+def update_recoil_dropdown_items():
+    """Update the recoil preset dropdown items."""
+    items = get_recoil_dropdown_items()
+    try:
+        dpg.configure_item("combo_recoil_preset", items=items)
+    except:
+        pass
+
+
+def set_recoil_setting(key, value):
+    """Set a recoil setting for the currently selected preset."""
+    preset = Active_Config.get("current_recoil_preset", "All weapons")
+    if preset not in Active_Config["recoil_presets"]:
+        Active_Config["recoil_presets"][preset] = DEFAULT_RECOIL_SETTINGS.copy()
+    Active_Config["recoil_presets"][preset][key] = value
+    save_settings()
+
+
+def update_recoil_ui_from_preset():
+    """Update recoil UI elements to match the currently selected preset."""
+    settings = get_current_recoil_settings()
+    # Update recoil_state settings so the thread uses current preset settings
+    if recoil_state.get("settings"):
+        recoil_state["settings"].update(settings)
+
+    try:
+        dpg.set_value("chk_recoil_enabled", settings.get("recoil_enabled", False))
+        dpg.set_value("slider_recoil_vert_strength", settings.get("recoil_vert_strength", 0.0))
+        dpg.set_value("slider_recoil_smoothness", settings.get("recoil_smoothness", 3.0))
+    except:
+        pass
+
+
+def on_recoil_toggle(sender, value):
+    """Handle recoil enable/disable toggle."""
+    set_recoil_setting("recoil_enabled", value)
+    if recoil_state.get("settings"):
+        recoil_state["settings"]["recoil_enabled"] = value
+    debug_log(f"Recoil control {'enabled' if value else 'disabled'}", "INFO")
+
+
+def on_recoil_auto_weapon_preset_toggle(sender, value):
+    """Handle recoil auto-weapon preset toggle."""
+    Active_Config["recoil_auto_weapon_preset"] = value
+
+    # Apply auto preset instantly when enabled so manual selections cannot linger
+    # until the recoil thread processes its next weapon update.
+    if value:
+        try:
+            pm = esp_overlay.get("pm")
+            client = esp_overlay.get("client")
+            if pm and client:
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
+                target_preset = current_weapon_name if current_weapon_name in RECOIL_WEAPON_PRESETS else "All weapons"
+                Active_Config["current_recoil_preset"] = target_preset
+                try:
+                    if dpg.does_item_exist("combo_recoil_preset"):
+                        dpg.set_value("combo_recoil_preset", target_preset)
+                except Exception:
+                    pass
+                update_recoil_ui_from_preset()
+        except Exception:
+            pass
+
+    save_settings()
+    debug_log(f"Recoil auto weapon preset {'enabled' if value else 'disabled'}", "INFO")
+
+
+def on_recoil_vert_strength_change(sender, value):
+    """Handle vertical recoil strength change."""
+    set_recoil_setting("recoil_vert_strength", float(value))
+    if recoil_state.get("settings"):
+        recoil_state["settings"]["recoil_vert_strength"] = float(value)
+    debug_log(f"Recoil vertical strength changed to: {value}", "INFO")
+
+
+def on_recoil_smoothness_change(sender, value):
+    """Handle recoil smoothness change (higher = smoother/slower compensation)."""
+    set_recoil_setting("recoil_smoothness", float(value))
+    if recoil_state.get("settings"):
+        recoil_state["settings"]["recoil_smoothness"] = float(value)
+    debug_log(f"Recoil smoothness changed to: {value}", "INFO")
+
+
+def on_recoil_preset_change(sender, value):
+    """Handle recoil weapon preset change."""
+    Active_Config["current_recoil_preset"] = value
+
+    # If auto weapon preset is enabled, manual preset changes should not disable
+    # or desync auto behavior. Immediately snap back to the current weapon preset.
+    if Active_Config.get("recoil_auto_weapon_preset", False):
+        try:
+            pm = esp_overlay.get("pm")
+            client = esp_overlay.get("client")
+            if pm and client:
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
+                target_preset = current_weapon_name if current_weapon_name in RECOIL_WEAPON_PRESETS else "All weapons"
+                Active_Config["current_recoil_preset"] = target_preset
+                try:
+                    if dpg.does_item_exist("combo_recoil_preset") and value != target_preset:
+                        dpg.set_value("combo_recoil_preset", target_preset)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    save_settings()
+    # Update UI
+    update_recoil_ui_from_preset()
+    debug_log(f"Recoil preset changed to: {Active_Config.get('current_recoil_preset', value)}", "INFO")
 
 
 def apply_config_to_ui():
@@ -1867,7 +2003,6 @@ def apply_config_to_ui():
             "chk_distance_esp": "distance_esp",
             "chk_health_bar": "health_bar",
             "chk_armor_bar": "armor_bar",
-            "chk_bomb_esp": "bomb_esp",
             "chk_footstep_esp": "footstep_esp",
             "chk_spotted_esp": "spotted_esp",
             "chk_hide_spotted_players": "hide_spotted_players",
@@ -1891,7 +2026,9 @@ def apply_config_to_ui():
             "chk_fps_cap_enabled": "fps_cap_enabled",
             "chk_hide_on_tabout": "hide_on_tabout",
             "chk_show_status_labels": "show_status_labels",
-            "chk_show_triggerbot_preset_list": "show_triggerbot_preset_list",
+
+            "chk_triggerbot_auto_weapon_preset": "triggerbot_auto_weapon_preset",
+            "chk_recoil_auto_weapon_preset": "recoil_auto_weapon_preset",
             "chk_show_overlay_fps": "show_overlay_fps",
             "chk_anti_afk_enabled": "anti_afk_enabled",
             "chk_bhop_enabled": "bhop_enabled",
@@ -1950,6 +2087,13 @@ def apply_config_to_ui():
         if dpg.does_item_exist("combo_lines_pos"):
             lines_pos = Active_Config.get("lines_position", "Bottom")
             dpg.set_value("combo_lines_pos", lines_pos)
+
+        # Update recoil preset dropdown and UI from current preset
+        try:
+            update_recoil_dropdown_items()
+            update_recoil_ui_from_preset()
+        except:
+            pass
         
         # Anti-aliasing combo (stored as string: "None", "2x MSAA", etc.)
         if dpg.does_item_exist("combo_antialiasing"):
@@ -2054,9 +2198,6 @@ def apply_config_to_ui():
             items = get_triggerbot_dropdown_items()
             dpg.configure_item("combo_triggerbot_preset", items=items)
             dpg.set_value("combo_triggerbot_preset", preset)
-        
-        # Update favorite checkbox
-        update_triggerbot_favorite_checkbox()
         
         # === COLOR MAPPINGS ===
         color_mappings = {
@@ -2208,8 +2349,6 @@ def apply_config_to_ui():
             "btn_bind_bhop_cheat": "bhop_key",
             "btn_bind_aimbot_toggle_cheat": "aimbot_toggle_key",
             "btn_bind_anti_afk_toggle_cheat": "anti_afk_toggle_key",
-            "btn_bind_cycle_triggerbot_presets_forwards_cheat": "cycle_triggerbot_presets_forwards_key",
-            "btn_bind_cycle_triggerbot_presets_backwards_cheat": "cycle_triggerbot_presets_backwards_key",
         }
         
         for button_tag, keybind_key in keybind_button_mappings.items():
@@ -2369,15 +2508,7 @@ def cycle_triggerbot_preset(direction):
     Args:
         direction: 1 for forwards, -1 for backwards
     """
-    favorites = Active_Config.get("favorite_triggerbot_presets", [])
-    
-    # Determine which presets to cycle through
-    if not favorites or len(favorites) <= 1:
-        # Cycle through all presets if no favorites or only one favorite
-        presets_to_cycle = TRIGGERBOT_WEAPON_PRESETS
-    else:
-        # Cycle through favorites if more than one favorite
-        presets_to_cycle = favorites
+    presets_to_cycle = TRIGGERBOT_WEAPON_PRESETS
     
     current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
     
@@ -2394,8 +2525,6 @@ def cycle_triggerbot_preset(direction):
     
     # Apply the new preset settings
     update_triggerbot_ui_from_preset()
-    # Update favorite checkbox
-    update_triggerbot_favorite_checkbox()
     
     # Update the dropdown in UI
     try:
@@ -2417,30 +2546,6 @@ def on_anti_afk_toggle_key_button():
     except:
         pass
 
-
-
-def on_cycle_triggerbot_presets_forwards_key_button():
-    """Handle cycle triggerbot presets forwards key bind button click."""
-    global keybind_listener
-    keybind_listener["listening"] = True
-    keybind_listener["target"] = "cycle_triggerbot_presets_forwards_key"
-    # Update button text to show we're listening
-    try:
-        dpg.set_item_label("btn_bind_cycle_triggerbot_presets_forwards_cheat", "Press any key...")
-    except:
-        pass
-
-
-def on_cycle_triggerbot_presets_backwards_key_button():
-    """Handle cycle triggerbot presets backwards key bind button click."""
-    global keybind_listener
-    keybind_listener["listening"] = True
-    keybind_listener["target"] = "cycle_triggerbot_presets_backwards_key"
-    # Update button text to show we're listening
-    try:
-        dpg.set_item_label("btn_bind_cycle_triggerbot_presets_backwards_cheat", "Press any key...")
-    except:
-        pass
 
 
 def anti_afk_loop():
@@ -2737,15 +2842,16 @@ def initialize_offset_globals():
         bool: True if successful, False if offsets not loaded or error occurred
     """
     global dwEntityList, dwLocalPlayerPawn, dwLocalPlayerController, dwViewMatrix
-    global dwPlantedC4, dwSensitivity, dwSensitivity_sensitivity, dwForceJump
+    global dwWeaponC4, dwSensitivity, dwForceJump
     global m_iTeamNum, m_lifeState, m_pGameSceneNode, m_iHealth, m_fFlags, m_vecVelocity
     global m_hPlayerPawn, m_iszPlayerName, m_iDesiredFOV
     global m_iIDEntIndex, m_ArmorValue, m_entitySpottedState, m_angEyeAngles
     global m_bIsScoped, m_pCameraServices
-    global m_vOldOrigin, m_pWeaponServices
+    global m_vOldOrigin, m_pWeaponServices, m_pAimPunchServices, m_predictableBaseAngle, m_unpredictableBaseAngle
+    global m_unpredictableBaseTick, m_iShotsFired
     global m_vecAbsOrigin, m_vecOrigin, m_modelState
     global m_AttributeManager, m_Item, m_iItemDefinitionIndex, m_hActiveWeapon, m_iClip1, pBulletServicesOffset, m_totalHits, m_iItemDefinitionIndex
-    global m_flTimerLength, m_flDefuseLength, m_bBeingDefused, m_nBombSite
+    global m_flTimerLength, m_flDefuseLength, m_bBeingDefused, m_bBombTicking, m_nBombSite
     global m_bSpotted, m_bSpottedByMask
     global m_iFOV, m_flFlashMaxAlpha
     
@@ -2759,14 +2865,24 @@ def initialize_offset_globals():
         missing_count = 0
         missing_offsets = []
         
-        def get_core(name):
+        def get_core(name, *fallback_names):
             nonlocal missing_count
-            try: return offsets['client.dll'][name]
-            except KeyError:
+            all_names = (name,) + fallback_names
+            for offset_name in all_names:
+                try:
+                    return offsets['client.dll'][offset_name]
+                except KeyError:
+                    continue
+
+            if len(all_names) == 1:
                 missing_count += 1
                 missing_offsets.append(f"core::{name}")
                 debug_log(f"Missing core offset: {name}", "WARNING")
-                return 0
+            else:
+                missing_count += 1
+                missing_offsets.append("core::" + "|".join(all_names))
+                debug_log(f"Missing core offset candidates: {', '.join(all_names)}", "WARNING")
+            return 0
                 
         def get_cls(cls_name, field_name):
             nonlocal missing_count
@@ -2790,9 +2906,8 @@ def initialize_offset_globals():
         dwLocalPlayerPawn = get_core('dwLocalPlayerPawn')
         dwLocalPlayerController = get_core('dwLocalPlayerController')
         dwViewMatrix = get_core('dwViewMatrix')
-        dwPlantedC4 = get_core('dwPlantedC4')
+        dwWeaponC4 = get_core('dwWeaponC4', 'dwPlantedC4')
         dwSensitivity = get_core('dwSensitivity')
-        dwSensitivity_sensitivity = get_core('dwSensitivity_sensitivity')
         # Load dwForceJump directly from buttons.hpp (not available in JSON files)
         dwForceJump = 0
         # Check local buttons.hpp first
@@ -2850,6 +2965,8 @@ def initialize_offset_globals():
         m_pCameraServices = get_cls('C_BasePlayerPawn', 'm_pCameraServices')
         m_vOldOrigin = get_cls('C_BasePlayerPawn', 'm_vOldOrigin')
         m_pWeaponServices = get_cls('C_BasePlayerPawn', 'm_pWeaponServices')
+        # AimPunch / Recoil services pointer
+        m_pAimPunchServices = get_cls('C_CSPlayerPawn', 'm_pAimPunchServices')
         
         # Scene node offsets
         m_vecAbsOrigin = get_cls('CGameSceneNode', 'm_vecAbsOrigin')
@@ -2878,6 +2995,7 @@ def initialize_offset_globals():
         m_flTimerLength = get_cls('C_PlantedC4', 'm_flTimerLength')
         m_flDefuseLength = get_cls('C_PlantedC4', 'm_flDefuseLength')
         m_bBeingDefused = get_cls('C_PlantedC4', 'm_bBeingDefused')
+        m_bBombTicking = get_cls('C_PlantedC4', 'm_bBombTicking')
         m_nBombSite = get_cls('C_PlantedC4', 'm_nBombSite')
         
         # Spotted state offsets
@@ -2888,15 +3006,31 @@ def initialize_offset_globals():
         m_iFOV = get_cls('CCSPlayerBase_CameraServices', 'm_iFOV')
         m_flFlashMaxAlpha = get_cls('C_CSPlayerPawnBase', 'm_flFlashMaxAlpha')
         
+        # AimPunch service fields (recoil angles)
+        try:
+            _ap = client_dll['client.dll']['classes']['CCSPlayer_AimPunchServices']['fields']
+            m_predictableBaseAngle   = _ap.get('m_predictableBaseAngle', 0)
+            m_unpredictableBaseAngle = _ap.get('m_unpredictableBaseAngle', 0)
+            m_unpredictableBaseTick  = _ap.get('m_unpredictableBaseTick', 160)
+        except Exception:
+            m_predictableBaseAngle   = 0
+            m_unpredictableBaseAngle = 0
+            m_unpredictableBaseTick  = 160
+
+        # Shots-fired offset (for burst detection)
+        m_iShotsFired = get_cls('C_CSPlayerPawn', 'm_iShotsFired')
+        
         if missing_count > 0:
-            hwnd = drag_state.get("hwnd") if drag_state.get("hwnd") else 0
-            title = app_state.get("app_title") if app_state.get("app_title") else FALLBACK_TITLE
+            # Always show missing offsets as a system-modal, topmost message so
+            # the user cannot miss it (don't parent to the cheat window).
             details = "\n".join(f"- {name}" for name in missing_offsets) if missing_offsets else "- Unknown offsets"
+            # Use MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_ICONWARNING | MB_TOPMOST
+            flags = 0x00001000 | 0x00010000 | 0x00000030 | 0x00040000
             ctypes.windll.user32.MessageBoxW(
-                hwnd,
+                0,
                 f"{missing_count} offsets failed to load..\n\nMissing offsets:\n{details}\n\nSome features may not work correctly.",
                 "Missing Offsets Warning",
-                0x00000030 | 0x00040000  # MB_ICONWARNING | MB_TOPMOST
+                flags
             )
             
         debug_log("Offset globals initialized successfully", "SUCCESS")
@@ -3071,6 +3205,17 @@ def is_cs2_foreground():
             return True
         
         return False
+    except Exception:
+        return False
+
+
+def is_cheat_foreground():
+    """Return True if the cheat/menu window is the current foreground window."""
+    try:
+        foreground_hwnd = win32gui.GetForegroundWindow()
+        if not foreground_hwnd:
+            return False
+        return bool(drag_state.get("hwnd") and foreground_hwnd == drag_state["hwnd"])
     except Exception:
         return False
 
@@ -3264,7 +3409,7 @@ class ESPOverlay:
         
         # Initialize GLFW
         if not glfw.init():
-            print("[ESP] Failed to initialize GLFW")
+            debug_log("[ESP] Failed to initialize GLFW", "ERROR")
             return None
         
         # Set window hints for transparent overlay
@@ -3289,7 +3434,7 @@ class ESPOverlay:
         # Create window
         self.window = glfw.create_window(width, height, "ESP Overlay", None, None)
         if not self.window:
-            print("[ESP] Failed to create GLFW window")
+            debug_log("[ESP] Failed to create GLFW window", "ERROR")
             glfw.terminate()
             return None
         
@@ -4662,153 +4807,6 @@ def render_footstep_esp(overlay, pm, client, view_matrix, settings, width, heigh
     # We keep the last_velocity cache to detect future sounds
 
 
-def render_bomb_esp(overlay, pm, client, settings):
-    """
-    Render bomb ESP showing planted C4 location and timer.
-    
-    Features:
-    - Shows bomb position with "BOMB: X.XX" timer
-    - Shows defuse timer when bomb is being defused
-    - Color coding: Red = can't defuse in time, Green = can defuse, White = not being defused
-    
-    Args:
-        overlay: ESPOverlay instance for drawing
-        pm: pymem instance for memory reading
-        client: client.dll base address
-        settings: ESP settings dictionary
-    """
-    global BombPlantedTime, BombDefusedTime
-    
-    try:
-        if not settings or not isinstance(settings, dict):
-            return
-            
-        # Check if bomb ESP is enabled
-        if not settings.get('bomb_esp', True):
-            return
-        
-        width = overlay.width
-        height = overlay.height
-        
-        # Read view matrix
-        matrix_bytes = pm.read_bytes(client + dwViewMatrix, 64)
-        view_matrix = struct.unpack('16f', matrix_bytes)
-        
-        # Check if bomb is planted
-        def bomb_is_planted():
-            global BombPlantedTime
-            try:
-                is_planted = pm.read_bool(client + dwPlantedC4 - 0x8)
-                if is_planted:
-                    if BombPlantedTime == 0:
-                        BombPlantedTime = time.time()
-                else:
-                    BombPlantedTime = 0
-                return is_planted
-            except:
-                return False
-        
-        # Get C4 base class address
-        def get_c4_base_class():
-            try:
-                planted_c4 = pm.read_longlong(client + dwPlantedC4)
-                planted_c4_class = pm.read_longlong(planted_c4)
-                return planted_c4_class
-            except:
-                return None
-        
-        # Get bomb world-to-screen position
-        def get_bomb_position_wts():
-            try:
-                c4_base = get_c4_base_class()
-                if not c4_base:
-                    return None
-                c4_node = pm.read_longlong(c4_base + m_pGameSceneNode)
-                c4_pos_x = pm.read_float(c4_node + m_vecAbsOrigin)
-                c4_pos_y = pm.read_float(c4_node + m_vecAbsOrigin + 0x4)
-                c4_pos_z = pm.read_float(c4_node + m_vecAbsOrigin + 0x8)
-                bomb_pos = w2s(view_matrix, c4_pos_x, c4_pos_y, c4_pos_z, width, height)
-                return bomb_pos
-            except:
-                return None
-        
-        # Get remaining bomb time
-        def get_bomb_time():
-            try:
-                c4_base = get_c4_base_class()
-                if not c4_base:
-                    return 0
-                bomb_time = pm.read_float(c4_base + m_flTimerLength) - (time.time() - BombPlantedTime)
-                return bomb_time if bomb_time >= 0 else 0
-            except:
-                return 0
-        
-        # Check if bomb is being defused
-        def is_being_defused():
-            global BombDefusedTime
-            try:
-                c4_base = get_c4_base_class()
-                if not c4_base:
-                    return False
-                is_defused = pm.read_bool(c4_base + m_bBeingDefused)
-                if is_defused:
-                    if BombDefusedTime == 0:
-                        BombDefusedTime = time.time()
-                else:
-                    BombDefusedTime = 0
-                return is_defused
-            except:
-                return False
-        
-        # Get defuse time remaining
-        def get_defuse_time():
-            try:
-                c4_base = get_c4_base_class()
-                if not c4_base:
-                    return 0
-                if is_being_defused():
-                    defuse_time = pm.read_float(c4_base + m_flDefuseLength) - (time.time() - BombDefusedTime)
-                    return defuse_time if defuse_time >= 0 else 0
-                return 0
-            except:
-                return 0
-        
-        # Render bomb info if planted
-        if bomb_is_planted():
-            bomb_position = get_bomb_position_wts()
-            bomb_time = get_bomb_time()
-            defuse_time = get_defuse_time()
-            
-            if bomb_position and bomb_position[0] > 0 and bomb_position[1] > 0:
-                # Build bomb text and determine color
-                if defuse_time > 0:
-                    bomb_text = f"BOMB: {bomb_time:.2f} | DEFUSE: {defuse_time:.2f}"
-                    if bomb_time < defuse_time:
-                        # Can't defuse in time - red
-                        text_color = (255, 0, 0)
-                    elif bomb_time > defuse_time:
-                        # Can defuse in time - green
-                        text_color = (0, 255, 0)
-                    else:
-                        # Equal - yellow
-                        text_color = (255, 255, 0)
-                else:
-                    bomb_text = f"BOMB: {bomb_time:.2f}"
-                    text_color = (255, 255, 255)  # White when not being defused
-                
-                # Draw bomb text with stroke for visibility
-                # Offset left and up a few pixels for better positioning
-                bomb_x = bomb_position[0] - 40
-                bomb_y = bomb_position[1] - 15
-                
-                overlay.draw_text(bomb_x, bomb_y, bomb_text, 
-                                  text_color[0], text_color[1], text_color[2], 
-                                  size=14.0, stroke=True)
-                
-    except Exception:
-        pass
-
-
 def render_radar(overlay, pm, client, settings):
     """
     Render a radar overlay showing enemy positions relative to local player.
@@ -5733,11 +5731,11 @@ def esp_overlay_thread():
             time.sleep(0.1)
     
     if not pm or not client:
-        print("[ESP] Failed to connect to CS2")
+        debug_log("[ESP] Failed to connect to CS2", "ERROR")
         esp_overlay["running"] = False
         return
     
-    print("[ESP] Connected to CS2")
+    debug_log("[ESP] Connected to CS2", "INFO")
     esp_overlay["pm"] = pm
     esp_overlay["client"] = client
     
@@ -5789,7 +5787,7 @@ def esp_overlay_thread():
             if check_counter >= 60:
                 check_counter = 0
                 if not is_cs2_running_fast(pm):
-                    print("[ESP] CS2 closed, stopping overlay")
+                    debug_log("[ESP] CS2 closed, stopping overlay", "WARNING")
                     break
                 
                 # Update window position less frequently
@@ -5798,7 +5796,7 @@ def esp_overlay_thread():
                     overlay.update_position(new_x, new_y, new_width, new_height)
                     esp_overlay["window_width"] = new_width
                     esp_overlay["window_height"] = new_height
-            
+
             # Skip rendering if overlay is hidden
             if not overlay_visible:
                 time.sleep(0.016)  # ~60fps check rate when hidden
@@ -5812,9 +5810,6 @@ def esp_overlay_thread():
             # Render ESP
             if settings.get('esp_enabled', True):
                 render_esp_frame(overlay, pm, client, settings)
-            
-            # Render Bomb ESP (independent of main ESP toggle)
-            render_bomb_esp(overlay, pm, client, settings)
             
             # Render Radar (independent of main ESP toggle)
             render_radar(overlay, pm, client, settings)
@@ -5884,29 +5879,15 @@ def esp_overlay_thread():
                 overlay.draw_text(5, 70, triggerbot_label, 255, 255, 255, size=12.0, stroke=True)
                 status_color = (0, 255, 0) if triggerbot_status == "ON" else (255, 0, 0)
                 overlay.draw_text(triggerbot_status_x, 70, triggerbot_status, status_color[0], status_color[1], status_color[2], size=12.0, stroke=True)
-                
-                # Show preset cycling list if enabled
-                if Active_Config.get("show_triggerbot_preset_list", False):
-                    favorites = Active_Config.get("favorite_triggerbot_presets", [])
-                    if not favorites or len(favorites) <= 1:
-                        # Cycle through all presets
-                        cycling_presets = TRIGGERBOT_WEAPON_PRESETS
-                    else:
-                        # Cycle through favorites
-                        cycling_presets = favorites
-                    
-                    y_offset = 100  # Start below triggerbot status
-                    for preset in cycling_presets:
-                        if preset == current_preset:
-                            # Highlight current preset - green if enabled, red if disabled
-                            current_preset_settings = get_triggerbot_settings_for_weapon(current_preset)
-                            triggerbot_enabled = current_preset_settings.get("triggerbot_enabled", False)
-                            highlight_color = (0, 255, 0) if triggerbot_enabled else (255, 0, 0)
-                            overlay.draw_text(5, y_offset, preset, highlight_color[0], highlight_color[1], highlight_color[2], size=10.0, stroke=True)
-                        else:
-                            # Regular white text for other presets
-                            overlay.draw_text(5, y_offset, preset, 255, 255, 255, size=10.0, stroke=True)
-                        y_offset += 12  # Space between lines
+                # Recoil status (show current preset and whether compensation is enabled)
+                current_recoil_preset = Active_Config.get("current_recoil_preset", "All weapons")
+                current_recoil_settings = get_recoil_settings_for_weapon(current_recoil_preset)
+                recoil_status = "ON" if current_recoil_settings.get("recoil_enabled", False) else "OFF"
+                recoil_label = f"Recoil ({current_recoil_preset}): "
+                recoil_status_x = 5 + len(recoil_label) * 7 + 8
+                overlay.draw_text(5, 85, recoil_label, 255, 255, 255, size=12.0, stroke=True)
+                status_color = (0, 255, 0) if recoil_status == "ON" else (255, 0, 0)
+                overlay.draw_text(recoil_status_x, 85, recoil_status, status_color[0], status_color[1], status_color[2], size=12.0, stroke=True)
             
             overlay.end_paint()
             
@@ -5924,12 +5905,12 @@ def esp_overlay_thread():
             pass
     
     # Cleanup
-    print("[ESP] Cleaning up overlay...")
+    debug_log("[ESP] Cleaning up overlay...", "INFO")
     overlay.destroy()
     esp_overlay["hwnd"] = None
     esp_overlay["pm"] = None
     esp_overlay["client"] = None
-    print("[ESP] Overlay thread stopped")
+    debug_log("[ESP] Overlay thread stopped", "INFO")
 
 
 def start_esp_overlay():
@@ -6016,6 +5997,91 @@ def w2s_aimbot(view_matrix, x, y, z, width, height):
     screen_y = (height / 2) * (1 - ndc_y)
     
     return (screen_x, screen_y)
+    
+def get_entity_from_handle(pm, client, handle):
+    """Resolve a CS2 entity pointer from an entity handle."""
+    if not pm or not client or not handle:
+        return 0
+
+    try:
+        entity_list = pm.read_longlong(client + dwEntityList)
+        if not entity_list:
+            return 0
+
+        index = handle & 0x7FFF
+        if index == 0:
+            return 0
+
+        list_entry = pm.read_longlong(entity_list + 0x8 * (index >> 9) + 0x10)
+        if not list_entry:
+            return 0
+
+        return pm.read_longlong(list_entry + 0x70 * (index & 0x1FF))
+    except Exception:
+        return 0
+
+def get_local_weapon_name(pm, client):
+    """Read the local player's active weapon name from game memory."""
+    try:
+        required_offsets = [
+            dwLocalPlayerPawn,
+            m_pWeaponServices,
+            m_hActiveWeapon,
+            m_AttributeManager,
+            m_Item,
+            m_iItemDefinitionIndex,
+        ]
+        # Some schema offsets can legitimately be 0, so only treat None as missing.
+        if any(offset is None for offset in required_offsets):
+            return "Unknown"
+
+        local_player_pawn = pm.read_longlong(client + dwLocalPlayerPawn)
+        if not local_player_pawn:
+            return "Unknown"
+
+        weapon_services = pm.read_longlong(local_player_pawn + m_pWeaponServices)
+        if not weapon_services:
+            return "Unknown"
+
+        weapon_handle = pm.read_uint(weapon_services + m_hActiveWeapon)
+        if not weapon_handle:
+            return "Unknown"
+
+        weapon_ptr = get_entity_from_handle(pm, client, weapon_handle)
+        if not weapon_ptr:
+            return "Unknown"
+
+        # Primary path uses nested econ item layout.
+        item_def_index = pm.read_ushort(
+            weapon_ptr + m_AttributeManager + m_Item + m_iItemDefinitionIndex
+        )
+
+        # Fallback path for layouts where m_iItemDefinitionIndex is directly on weapon.
+        if item_def_index <= 0:
+            try:
+                item_def_index = pm.read_ushort(weapon_ptr + m_iItemDefinitionIndex)
+            except Exception:
+                item_def_index = 0
+
+        if item_def_index <= 0:
+            return "Unknown"
+
+        return WEAPON_NAMES.get(item_def_index, f"Unknown ({item_def_index})")
+    except Exception:
+        return "Unknown"
+
+
+def get_local_player_speed(pm, local_player_pawn):
+    """Return the local player's current velocity magnitude, or None if unavailable."""
+    try:
+        if local_player_pawn is None or m_vecVelocity is None:
+            return None
+
+        vel_bytes = pm.read_bytes(local_player_pawn + m_vecVelocity, 12)
+        vel_x, vel_y, vel_z = struct.unpack('3f', vel_bytes)
+        return math.sqrt(vel_x * vel_x + vel_y * vel_y + vel_z * vel_z)
+    except Exception:
+        return None
 
 
 def get_head_hitbox_world_sphere(head_xyz, neck_xyz):
@@ -6285,7 +6351,7 @@ def aimbot_thread():
     """
     global aimbot_state
     
-    print("[AIMBOT] Thread starting...")
+    debug_log("[AIMBOT] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -6297,10 +6363,10 @@ def aimbot_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[AIMBOT] Failed to get pm/client from ESP overlay")
+        debug_log("[AIMBOT] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[AIMBOT] Connected to CS2 via ESP overlay")
+    debug_log("[AIMBOT] Connected to CS2 via ESP overlay", "INFO")
     
     while aimbot_state["running"]:
         try:
@@ -6581,6 +6647,11 @@ def aimbot_thread():
             aimbot_state["accum_x"] -= move_x
             aimbot_state["accum_y"] -= move_y
             
+            # Check if CS2 is in foreground before moving mouse
+            if not is_cs2_foreground():
+                time.sleep(0.001)
+                continue
+            
             # Only move if we have at least 1 pixel to move
             if move_x != 0 or move_y != 0:
                 win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, move_x, move_y, 0, 0)
@@ -6591,7 +6662,7 @@ def aimbot_thread():
         except Exception as e:
             time.sleep(0.01)
     
-    print("[AIMBOT] Thread stopped")
+    debug_log("[AIMBOT] Thread stopped", "INFO")
 
 
 def start_aimbot_thread():
@@ -6642,6 +6713,9 @@ def stop_aimbot_thread():
 # Background thread that handles automatic firing when crosshair is on enemy.
 # =============================================================================
 
+
+
+
 def triggerbot_thread():
     """
     Triggerbot background thread.
@@ -6654,7 +6728,7 @@ def triggerbot_thread():
     """
     global triggerbot_state
     
-    print("[TRIGGERBOT] Thread starting...")
+    debug_log("[TRIGGERBOT] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -6666,10 +6740,10 @@ def triggerbot_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[TRIGGERBOT] Failed to get pm/client from ESP overlay")
+        debug_log("[TRIGGERBOT] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[TRIGGERBOT] Connected to CS2 via ESP overlay")
+    debug_log("[TRIGGERBOT] Connected to CS2 via ESP overlay", "INFO")
     
     # Initialize mouse controller
     mouse = MouseController()
@@ -6680,37 +6754,6 @@ def triggerbot_thread():
     
     while triggerbot_state["running"]:
         try:
-            # Get settings for current preset (not weapon-specific)
-            current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
-            settings = get_triggerbot_settings_for_weapon(current_preset)
-            
-            # Check if triggerbot is enabled
-            if not settings.get("triggerbot_enabled", False):
-                first_shot_pending = True
-                time.sleep(0.01)
-                continue
-            
-            # Get triggerbot key and check if it's held
-            triggerbot_key = Keybinds_Config.get("triggerbot_key", "x").lower()
-            if triggerbot_key == "none":
-                first_shot_pending = True
-                time.sleep(0.01)
-                continue
-            
-            # Get VK code for triggerbot key
-            vk_code = KEY_NAME_TO_VK.get(triggerbot_key, 0)
-            if vk_code == 0:
-                first_shot_pending = True
-                time.sleep(0.01)
-                continue
-            
-            # Check if key is held
-            key_held = (win32api.GetAsyncKeyState(vk_code) & 0x8000) != 0
-            if not key_held:
-                first_shot_pending = True
-                time.sleep(0.001)
-                continue
-            
             # Get pm and client from ESP overlay
             pm = esp_overlay.get("pm")
             client = esp_overlay.get("client")
@@ -6727,15 +6770,67 @@ def triggerbot_thread():
                     continue
                 local_team = pm.read_int(local_player_pawn + m_iTeamNum)
                 
-                # Get current weapon for settings
-                current_weapon_name = "All weapons"
-                
-                # Update overlay with current weapon
+                # Get current weapon and show it in overlay status labels.
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
                 esp_overlay["current_triggerbot_weapon"] = current_weapon_name
+
+                auto_weapon_preset = Active_Config.get("triggerbot_auto_weapon_preset", False)
+                if auto_weapon_preset:
+                    target_preset = current_weapon_name if current_weapon_name in TRIGGERBOT_WEAPON_PRESETS else "All weapons"
+                    if Active_Config.get("current_triggerbot_preset", "All weapons") != target_preset:
+                        Active_Config["current_triggerbot_preset"] = target_preset
+                        save_settings()
+                        # Keep the Triggerbot tab controls in sync with auto preset switching.
+                        update_triggerbot_ui_from_preset()
+                        try:
+                            if dpg.does_item_exist("combo_triggerbot_preset"):
+                                dpg.set_value("combo_triggerbot_preset", target_preset)
+                        except Exception:
+                            pass
+                        debug_log(f"Auto-switched triggerbot preset to: {target_preset}", "INFO")
+                
+                current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
+                settings = get_triggerbot_settings_for_weapon(current_preset)
                 
             except:
                 time.sleep(0.001)
                 continue
+
+            # Check if triggerbot is enabled
+            if not settings.get("triggerbot_enabled", False):
+                first_shot_pending = True
+                time.sleep(0.01)
+                continue
+
+            # Get triggerbot key and check if it's held
+            triggerbot_key = Keybinds_Config.get("triggerbot_key", "x").lower()
+            if triggerbot_key == "none":
+                first_shot_pending = True
+                time.sleep(0.01)
+                continue
+
+            # Get VK code for triggerbot key
+            vk_code = KEY_NAME_TO_VK.get(triggerbot_key, 0)
+            if vk_code == 0:
+                first_shot_pending = True
+                time.sleep(0.01)
+                continue
+
+            # Check if key is held
+            key_held = (win32api.GetAsyncKeyState(vk_code) & 0x8000) != 0
+            if not key_held:
+                first_shot_pending = True
+                time.sleep(0.001)
+                continue
+
+            if settings.get("triggerbot_dont_shoot_while_moving", False):
+                player_speed = get_local_player_speed(pm, local_player_pawn)
+                if player_speed is not None and player_speed > 0.0:
+                    first_shot_pending = True
+                    time.sleep(0.001)
+                    continue
             
             # Read entity ID under crosshair
             try:
@@ -6890,6 +6985,11 @@ def triggerbot_thread():
                 if not key_held:
                     first_shot_pending = True
                     continue
+                if settings.get("triggerbot_dont_shoot_while_moving", False):
+                    player_speed = get_local_player_speed(pm, local_player_pawn)
+                    if player_speed is not None and player_speed > 0.0:
+                        first_shot_pending = True
+                        continue
                 try:
                     entity_id = pm.read_int(local_player_pawn + m_iIDEntIndex)
                     if entity_id <= 0:
@@ -6905,6 +7005,11 @@ def triggerbot_thread():
                 # Burst fire mode - fire burst_shots times
                 # Complete the entire burst even if target becomes invalid or key released
                 for _ in range(burst_shots):
+                    if settings.get("triggerbot_dont_shoot_while_moving", False):
+                        player_speed = get_local_player_speed(pm, local_player_pawn)
+                        if player_speed is not None and player_speed > 0.0:
+                            first_shot_pending = True
+                            break
                     mouse.click(MouseButton.left)
                     time.sleep(0.05)  # Small delay between burst shots
                 
@@ -6914,6 +7019,11 @@ def triggerbot_thread():
             else:
                 # Non-burst mode - single shots with delay between each
                 # Fire one shot
+                if settings.get("triggerbot_dont_shoot_while_moving", False):
+                    player_speed = get_local_player_speed(pm, local_player_pawn)
+                    if player_speed is not None and player_speed > 0.0:
+                        first_shot_pending = True
+                        continue
                 mouse.click(MouseButton.left)
                 
                 # Wait between shots delay before allowing next shot
@@ -6924,7 +7034,7 @@ def triggerbot_thread():
         except Exception as e:
             time.sleep(0.01)
     
-    print("[TRIGGERBOT] Thread stopped")
+    debug_log("[TRIGGERBOT] Thread stopped", "INFO")
 
 
 def start_triggerbot_thread():
@@ -6987,7 +7097,7 @@ def anti_flash_thread():
     """
     global anti_flash_state
     
-    print("[ANTI FLASH] Thread starting...")
+    debug_log("[ANTI FLASH] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -6999,10 +7109,10 @@ def anti_flash_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[ANTI FLASH] Failed to get pm/client from ESP overlay")
+        debug_log("[ANTI FLASH] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[ANTI FLASH] Connected to CS2 via ESP overlay")
+    debug_log("[ANTI FLASH] Connected to CS2 via ESP overlay", "INFO")
     
     while anti_flash_state["running"]:
         try:
@@ -7049,7 +7159,7 @@ def anti_flash_thread():
         except Exception as e:
             time.sleep(0.1)
     
-    print("[ANTI FLASH] Thread stopped")
+    debug_log("[ANTI FLASH] Thread stopped", "INFO")
 
 
 def start_anti_flash_thread():
@@ -7108,7 +7218,7 @@ def hitsound_thread():
     """
     global hitsound_state
     
-    print("[HITSOUND] Thread starting...")
+    debug_log("[HITSOUND] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -7120,10 +7230,10 @@ def hitsound_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[HITSOUND] Failed to get pm/client from ESP overlay")
+        debug_log("[HITSOUND] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[HITSOUND] Connected to CS2 via ESP overlay")
+    debug_log("[HITSOUND] Connected to CS2 via ESP overlay", "INFO")
     
     while hitsound_state["running"]:
         try:
@@ -7195,7 +7305,7 @@ def hitsound_thread():
         except Exception as e:
             time.sleep(0.1)
     
-    print("[HITSOUND] Thread stopped")
+    debug_log("[HITSOUND] Thread stopped", "INFO")
 
 
 def start_hitsound_thread():
@@ -7254,7 +7364,7 @@ def fov_changer_thread():
     """
     global fov_changer_state
     
-    print("[FOV CHANGER] Thread starting...")
+    debug_log("[FOV CHANGER] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -7266,10 +7376,10 @@ def fov_changer_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[FOV CHANGER] Failed to get pm/client from ESP overlay")
+        debug_log("[FOV CHANGER] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[FOV CHANGER] Connected to CS2 via ESP overlay")
+    debug_log("[FOV CHANGER] Connected to CS2 via ESP overlay", "INFO")
     
     while fov_changer_state["running"]:
         try:
@@ -7314,7 +7424,7 @@ def fov_changer_thread():
         except Exception as e:
             time.sleep(0.1)
     
-    print("[FOV CHANGER] Thread stopped")
+    debug_log("[FOV CHANGER] Thread stopped", "INFO")
 
 
 def start_fov_changer_thread():
@@ -7382,7 +7492,7 @@ def acs_thread():
     """
     global acs_state
     
-    print("[ACS] Thread starting...")
+    debug_log("[ACS] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -7394,10 +7504,10 @@ def acs_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        print("[ACS] Failed to get pm/client from ESP overlay")
+        debug_log("[ACS] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    print("[ACS] Connected to CS2 via ESP overlay")
+    debug_log("[ACS] Connected to CS2 via ESP overlay", "INFO")
     
     while acs_state["running"]:
         try:
@@ -7578,6 +7688,11 @@ def acs_thread():
                 else:
                     move_y = int(max(-speed, dy))  # Don't overshoot
             
+            # Check if CS2 is in foreground before moving mouse
+            if not is_cs2_foreground():
+                time.sleep(0.005)
+                continue
+            
             # Move mouse (vertical only)
             win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, move_y, 0, 0)
             
@@ -7587,7 +7702,7 @@ def acs_thread():
         except Exception as e:
             time.sleep(0.01)
     
-    print("[ACS] Thread stopped")
+    debug_log("[ACS] Thread stopped", "INFO")
 
 
 def start_acs_thread():
@@ -7626,6 +7741,151 @@ def stop_acs_thread():
         acs_state["thread"] = None
     
     debug_log("ACS thread stopped", "SUCCESS")
+
+
+# =============================================================================
+# RECOIL THREAD
+# =============================================================================
+def recoil_thread():
+    """Recoil compensation thread - runs in background."""
+    global recoil_state
+
+    debug_log("[RECOIL] Thread starting...", "INFO")
+
+    # Wait for ESP overlay to connect to CS2 and provide pm/client
+    max_wait = 100
+    wait_count = 0
+    while wait_count < max_wait:
+        if esp_overlay.get("pm") and esp_overlay.get("client"):
+            break
+        time.sleep(0.1)
+        wait_count += 1
+
+    if not esp_overlay.get("pm") or not esp_overlay.get("client"):
+        debug_log("[RECOIL] Failed to get pm/client from ESP overlay", "ERROR")
+        return
+
+    pm = esp_overlay.get("pm")
+    client = esp_overlay.get("client")
+
+    # Simplified recoil: apply mouse movement based solely on configured strength
+    # values while the player is firing (left mouse button). This avoids reading
+    # in-game aim punch offsets and relies only on user-set strengths.
+    while recoil_state["running"]:
+        try:
+            # Refresh settings from the currently selected recoil preset so UI changes
+            # take effect immediately without restarting the thread.
+            settings = get_current_recoil_settings()
+
+            # Whether compensation is enabled for the currently selected preset
+            compensate_enabled = settings.get("recoil_enabled", False)
+
+            # Optionally auto-switch preset based on weapon (keeps existing behavior)
+            try:
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
+                esp_overlay["current_recoil_weapon"] = current_weapon_name
+
+                auto_weapon_preset = Active_Config.get("recoil_auto_weapon_preset", False)
+                if auto_weapon_preset:
+                    target_preset = current_weapon_name if current_weapon_name in RECOIL_WEAPON_PRESETS else "All weapons"
+                    if Active_Config.get("current_recoil_preset", "All weapons") != target_preset:
+                        Active_Config["current_recoil_preset"] = target_preset
+                        save_settings()
+                        update_recoil_ui_from_preset()
+                        try:
+                            if dpg.does_item_exist("combo_recoil_preset"):
+                                dpg.set_value("combo_recoil_preset", target_preset)
+                        except Exception:
+                            pass
+                        debug_log(f"Auto-switched recoil preset to: {target_preset}", "INFO")
+            except:
+                pass
+
+            # Read configured strengths
+            vert_strength = settings.get("recoil_vert_strength", 0.0)
+
+            # Do nothing if compensation is disabled or vertical strength is zero
+            if not compensate_enabled or vert_strength == 0.0:
+                time.sleep(0.01)
+                continue
+
+            # Respect tab-out protection: require CS2 foreground
+            if not is_cs2_foreground():
+                time.sleep(0.01)
+                continue
+
+            # If the cheat/menu window is foreground, do not apply recoil
+            # compensation so the user can safely interact with the menu.
+            if is_cheat_foreground():
+                time.sleep(0.01)
+                continue
+
+            # Read active weapon clip count using game offsets so we don't apply
+            # compensation when the weapon has no bullets in the clip.
+            clip_count = None
+            try:
+                local_player_pawn = pm.read_longlong(client + dwLocalPlayerPawn)
+                if local_player_pawn:
+                    weapon_services = pm.read_longlong(local_player_pawn + m_pWeaponServices)
+                    if weapon_services:
+                        weapon_handle = pm.read_uint(weapon_services + m_hActiveWeapon)
+                        weapon_ptr = get_entity_from_handle(pm, client, weapon_handle)
+                        if weapon_ptr and m_iClip1:
+                            clip_count = pm.read_int(weapon_ptr + m_iClip1)
+            except Exception:
+                clip_count = None
+
+            # If we can read the clip and it's empty, skip compensation
+            if clip_count is not None and clip_count <= 0:
+                time.sleep(0.01)
+                continue
+
+            # Apply while left mouse button is held (player is firing)
+            try:
+                if win32api.GetAsyncKeyState(win32con.VK_LBUTTON) & 0x8000:
+                    # Tunable multiplier: how many pixels per loop per unit strength
+                    mul = 3.0
+                    smoothness = settings.get("recoil_smoothness", 3.0) or 1.0
+                    # Higher smoothness -> smaller per-loop movement (smoother)
+                    effective_mul = mul / float(smoothness)
+                    move_x = 0
+                    move_y = int(vert_strength * effective_mul)
+                    if move_x != 0 or move_y != 0:
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, move_x, move_y, 0, 0)
+            except Exception:
+                pass
+
+            time.sleep(0.005)
+        except Exception:
+            time.sleep(0.01)
+
+    debug_log("[RECOIL] Thread stopped", "INFO")
+
+
+def start_recoil_thread():
+    global recoil_state
+    if recoil_state["running"]:
+        return
+    debug_log("Starting recoil thread...", "INFO")
+    recoil_state["settings"] = get_current_recoil_settings()
+    recoil_state["running"] = True
+    recoil_state["thread"] = threading.Thread(target=recoil_thread, daemon=True)
+    recoil_state["thread"].start()
+    debug_log("Recoil thread started", "SUCCESS")
+
+
+def stop_recoil_thread():
+    global recoil_state
+    if not recoil_state["running"]:
+        return
+    debug_log("Stopping recoil thread...", "INFO")
+    recoil_state["running"] = False
+    if recoil_state["thread"]:
+        recoil_state["thread"].join(timeout=2.0)
+        recoil_state["thread"] = None
+    debug_log("Recoil thread stopped", "SUCCESS")
 
 
 # =============================================================================
@@ -7831,9 +8091,8 @@ def on_test_clicked():
         try:
             filepath = os.path.join(TEMP_FOLDER, filename)
             urllib.request.urlretrieve(url, filepath)
-            print(f"[SOUNDS] Downloaded {filename}")
         except Exception as e:
-            print(f"[SOUNDS] Failed to download {filename}: {e}")
+            pass
     
     time.sleep(1.0)
     
@@ -8211,13 +8470,6 @@ def on_show_status_labels_toggle(sender, value):
     Active_Config["show_status_labels"] = value
     save_settings()
     debug_log(f"Status labels {'enabled' if value else 'disabled'}", "INFO")
-
-
-def on_show_triggerbot_preset_list_toggle(sender, value):
-    """Handle show triggerbot preset list toggle."""
-    Active_Config["show_triggerbot_preset_list"] = value
-    save_settings()
-    debug_log(f"Triggerbot preset list in overlay {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_show_overlay_fps_toggle(sender, value):
@@ -8914,6 +9166,14 @@ def create_changelog_tab():
     """
     with dpg.tab(label="Changelog"):
         dpg.add_separator()
+        dpg.add_text("V1.2:")
+        dpg.add_text("- Added auto change weapon preset to triggerbot")
+        dpg.add_text("- Removed favorite preset option from triggerbot")
+        dpg.add_text("- Added recoil control system to aim settings")
+        dpg.add_text("- Removed bomb ESP")
+        dpg.add_text("- Removed cycle triggerbot preset keybinds")
+        dpg.add_text("")
+        dpg.add_separator()
         dpg.add_text("V1.1:")
         dpg.add_text("- Updated triggerbot head only mode heat detection")
         dpg.add_text(" - Head hitbox ESP is now 3d and more accurate")
@@ -9120,15 +9380,6 @@ def on_head_hitbox_toggle(sender, value):
         save_settings()
         debug_log(f"Head Hitbox {'enabled' if value else 'disabled'}", "INFO")
     update_esp_preview()
-
-
-def on_bomb_esp_toggle(sender, value):
-    """Handle Bomb ESP toggle."""
-    if esp_overlay["settings"]:
-        esp_overlay["settings"]["bomb_esp"] = value
-        Active_Config["bomb_esp"] = value
-        save_settings()
-        debug_log(f"Bomb ESP {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_footstep_esp_toggle(sender, value):
@@ -9878,6 +10129,7 @@ def on_aimbot_show_radius_toggle(sender, value):
     debug_log(f"Aimbot radius visibility {'enabled' if value else 'disabled'}", "INFO")
 
 
+
 def on_aimbot_spotted_check_toggle(sender, value):
     """Handle aimbot spotted check toggle."""
     if esp_overlay["settings"]:
@@ -10140,34 +10392,71 @@ def on_triggerbot_head_only_toggle(sender, value):
     debug_log(f"Triggerbot head-only mode {'enabled' if value else 'disabled'}", "INFO")
 
 
+def on_triggerbot_dont_shoot_while_moving_toggle(sender, value):
+    """Handle triggerbot movement gate toggle."""
+    set_triggerbot_setting("triggerbot_dont_shoot_while_moving", value)
+    if triggerbot_state["settings"]:
+        triggerbot_state["settings"]["triggerbot_dont_shoot_while_moving"] = value
+    debug_log(f"Triggerbot don't shoot while moving {'enabled' if value else 'disabled'}", "INFO")
+
+
 def on_triggerbot_preset_change(sender, value):
     """Handle triggerbot weapon preset change."""
     Active_Config["current_triggerbot_preset"] = value
+
+    # If auto weapon preset is enabled, manual preset changes should not disable
+    # or desync auto behavior. Immediately snap back to the current weapon preset.
+    if Active_Config.get("triggerbot_auto_weapon_preset", False):
+        try:
+            pm = esp_overlay.get("pm")
+            client = esp_overlay.get("client")
+            if pm and client:
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
+                target_preset = current_weapon_name if current_weapon_name in TRIGGERBOT_WEAPON_PRESETS else "All weapons"
+                Active_Config["current_triggerbot_preset"] = target_preset
+                try:
+                    if dpg.does_item_exist("combo_triggerbot_preset") and value != target_preset:
+                        dpg.set_value("combo_triggerbot_preset", target_preset)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     save_settings()
     # Update UI to reflect new preset settings
     update_triggerbot_ui_from_preset()
-    # Update favorite checkbox
-    update_triggerbot_favorite_checkbox()
-    debug_log(f"Triggerbot preset changed to: {value}", "INFO")
+    debug_log(f"Triggerbot preset changed to: {Active_Config.get('current_triggerbot_preset', value)}", "INFO")
 
 
-def on_triggerbot_favorite_toggle(sender, value):
-    """Handle favorite toggle for current triggerbot preset."""
-    current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
-    favorites = Active_Config.get("favorite_triggerbot_presets", [])
-    
+def on_triggerbot_auto_weapon_preset_toggle(sender, value):
+    """Handle auto preset switching based on current weapon."""
+    Active_Config["triggerbot_auto_weapon_preset"] = value
+
+    # Apply auto preset instantly when enabled so manual selections cannot linger
+    # until the triggerbot thread processes its next weapon update.
     if value:
-        if current_preset not in favorites:
-            favorites.append(current_preset)
-    else:
-        if current_preset in favorites:
-            favorites.remove(current_preset)
-    
-    Active_Config["favorite_triggerbot_presets"] = favorites
+        try:
+            pm = esp_overlay.get("pm")
+            client = esp_overlay.get("client")
+            if pm and client:
+                current_weapon_name = get_local_weapon_name(pm, client)
+                if not current_weapon_name:
+                    current_weapon_name = "Unknown"
+                target_preset = current_weapon_name if current_weapon_name in TRIGGERBOT_WEAPON_PRESETS else "All weapons"
+                Active_Config["current_triggerbot_preset"] = target_preset
+                try:
+                    if dpg.does_item_exist("combo_triggerbot_preset"):
+                        dpg.set_value("combo_triggerbot_preset", target_preset)
+                except Exception:
+                    pass
+                update_triggerbot_ui_from_preset()
+        except Exception:
+            pass
+
     save_settings()
-    # Update dropdown items
-    update_triggerbot_dropdown_items()
-    debug_log(f"Triggerbot preset '{current_preset}' {'favorited' if value else 'unfavorited'}", "INFO")
+    debug_log(f"Triggerbot auto weapon preset {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_triggerbot_key_button():
@@ -11331,16 +11620,6 @@ def create_esp_tab():
                 ALL_TOOLTIP_TAGS.append("tooltip_head_hitbox")
                 
                 dpg.add_checkbox(
-                    label="Bomb", 
-                    default_value=Active_Config.get("bomb_esp", True),
-                    tag="chk_bomb_esp",
-                    callback=on_bomb_esp_toggle
-                )
-                with dpg.tooltip("chk_bomb_esp", tag="tooltip_bomb_esp", show=show_tips):
-                    dpg.add_text("Show bomb location when planted")
-                ALL_TOOLTIP_TAGS.append("tooltip_bomb_esp")
-                
-                dpg.add_checkbox(
                     label="Footsteps", 
                     default_value=Active_Config.get("footstep_esp", False),
                     tag="chk_footstep_esp",
@@ -11826,30 +12105,16 @@ def create_aimbot_tab():
                 with dpg.tooltip("combo_triggerbot_preset", tag="tooltip_triggerbot_preset", show=show_tips):
                     dpg.add_text("Select weapon preset to configure. Settings are saved per preset.")
                 ALL_TOOLTIP_TAGS.append("tooltip_triggerbot_preset")
-                
-                # Favorite checkbox
-                current_preset = Active_Config.get("current_triggerbot_preset", "All weapons")
-                favorites = Active_Config.get("favorite_triggerbot_presets", [])
+
                 dpg.add_checkbox(
-                    label="Favorite Preset",
-                    default_value=current_preset in favorites,
-                    callback=on_triggerbot_favorite_toggle,
-                    tag="chk_triggerbot_favorite"
+                    label="Automatically Change Weapon Preset",
+                    default_value=Active_Config.get("triggerbot_auto_weapon_preset", False),
+                    callback=on_triggerbot_auto_weapon_preset_toggle,
+                    tag="chk_triggerbot_auto_weapon_preset"
                 )
-                with dpg.tooltip("chk_triggerbot_favorite", tag="tooltip_triggerbot_favorite", show=show_tips):
-                    dpg.add_text("Add this preset to favorites (shows at top of dropdown)")
-                ALL_TOOLTIP_TAGS.append("tooltip_triggerbot_favorite")
-                
-                # Show preset list toggle
-                dpg.add_checkbox(
-                    label="List Presets To Cycle In Status Labels Overlay",
-                    default_value=Active_Config.get("show_triggerbot_preset_list", False),
-                    callback=on_show_triggerbot_preset_list_toggle,
-                    tag="chk_show_triggerbot_preset_list"
-                )
-                with dpg.tooltip("chk_show_triggerbot_preset_list", tag="tooltip_show_triggerbot_preset_list", show=show_tips):
-                    dpg.add_text("Show list of cycling presets under triggerbot status in overlay")
-                ALL_TOOLTIP_TAGS.append("tooltip_show_triggerbot_preset_list")
+                with dpg.tooltip("chk_triggerbot_auto_weapon_preset", tag="tooltip_triggerbot_auto_weapon_preset", show=show_tips):
+                    dpg.add_text("Automatically switches triggerbot preset to match your current weapon")
+                ALL_TOOLTIP_TAGS.append("tooltip_triggerbot_auto_weapon_preset")
                 
                 dpg.add_separator()
                 
@@ -11864,6 +12129,16 @@ def create_aimbot_tab():
                 with dpg.tooltip("chk_triggerbot_enabled", tag="tooltip_triggerbot_enabled", show=show_tips):
                     dpg.add_text("Auto-fire when crosshair is on enemy")
                 ALL_TOOLTIP_TAGS.append("tooltip_triggerbot_enabled")
+
+                dpg.add_checkbox(
+                    label="Don't Shoot While Moving",
+                    default_value=current_settings.get("triggerbot_dont_shoot_while_moving", False),
+                    callback=on_triggerbot_dont_shoot_while_moving_toggle,
+                    tag="chk_triggerbot_dont_shoot_while_moving"
+                )
+                with dpg.tooltip("chk_triggerbot_dont_shoot_while_moving", tag="tooltip_triggerbot_dont_shoot_while_moving", show=show_tips):
+                    dpg.add_text("Prevents triggerbot from firing unless your local player speed is 0")
+                ALL_TOOLTIP_TAGS.append("tooltip_triggerbot_dont_shoot_while_moving")
                 
                 dpg.add_spacer(height=UI_SPACING_SMALL)
                 dpg.add_text("Timing")
@@ -12028,6 +12303,81 @@ def create_aimbot_tab():
                     dpg.add_text("Show lines without holding ACS key")
                 ALL_TOOLTIP_TAGS.append("tooltip_acs_always_show_deadzone_lines")
             
+            # Recoil sub-tab
+            with dpg.tab(label="Recoil"):
+                dpg.add_text("Recoil Control")
+                dpg.add_separator()
+                show_tips = Active_Config.get("show_tooltips", True)
+
+                # Weapon preset dropdown
+                dpg.add_combo(
+                    label="Weapon Preset",
+                    items=get_recoil_dropdown_items(),
+                    default_value=Active_Config.get("current_recoil_preset", "All weapons"),
+                    callback=on_recoil_preset_change,
+                    tag="combo_recoil_preset"
+                )
+                with dpg.tooltip("combo_recoil_preset", tag="tooltip_recoil_preset", show=show_tips):
+                    dpg.add_text("Select weapon preset for recoil control. Settings are saved per preset.")
+                ALL_TOOLTIP_TAGS.append("tooltip_recoil_preset")
+
+                dpg.add_checkbox(
+                    label="Automatically Change Weapon Preset",
+                    default_value=Active_Config.get("recoil_auto_weapon_preset", False),
+                    callback=on_recoil_auto_weapon_preset_toggle,
+                    tag="chk_recoil_auto_weapon_preset"
+                )
+                with dpg.tooltip("chk_recoil_auto_weapon_preset", tag="tooltip_recoil_auto_weapon_preset", show=show_tips):
+                    dpg.add_text("Automatically switches recoil preset to match your current weapon")
+                ALL_TOOLTIP_TAGS.append("tooltip_recoil_auto_weapon_preset")
+
+                dpg.add_separator()
+
+                # Enable recoil control
+                current_recoil_settings = get_current_recoil_settings()
+                dpg.add_checkbox(
+                    label="Enable Recoil Control",
+                    default_value=current_recoil_settings.get("recoil_enabled", False),
+                    callback=on_recoil_toggle,
+                    tag="chk_recoil_enabled"
+                )
+                with dpg.tooltip("chk_recoil_enabled", tag="tooltip_recoil_enabled", show=show_tips):
+                    dpg.add_text("Compensate weapon recoil while firing using mouse movement")
+                ALL_TOOLTIP_TAGS.append("tooltip_recoil_enabled")
+
+                dpg.add_spacer(height=UI_SPACING_SMALL)
+
+                # Strength sliders
+                dpg.add_text("Strength")
+                dpg.add_separator()
+                dpg.add_slider_float(
+                    label="Vertical Strength",
+                    default_value=current_recoil_settings.get("recoil_vert_strength", 0.0),
+                    min_value=0.0,
+                    max_value=5.0,
+                    tag="slider_recoil_vert_strength",
+                    callback=on_recoil_vert_strength_change,
+                    format="%.2f"
+                )
+                with dpg.tooltip("slider_recoil_vert_strength", tag="tooltip_recoil_vert_strength", show=show_tips):
+                    dpg.add_text("Vertical compensation multiplier")
+                ALL_TOOLTIP_TAGS.append("tooltip_recoil_vert_strength")
+                dpg.add_separator()
+                # Smoothness slider
+                dpg.add_slider_float(
+                    label="Smoothness",
+                    default_value=current_recoil_settings.get("recoil_smoothness", 3.0),
+                    min_value=1.0,
+                    max_value=10.0,
+                    tag="slider_recoil_smoothness",
+                    callback=on_recoil_smoothness_change,
+                    format="%.2f"
+                )
+                with dpg.tooltip("slider_recoil_smoothness", tag="tooltip_recoil_smoothness", show=show_tips):
+                    dpg.add_text("Higher = smoother/slower compensation (1 = fastest)")
+                ALL_TOOLTIP_TAGS.append("tooltip_recoil_smoothness")
+                
+
 def create_colors_tab():
     """
     Create the Appearance tab content.
@@ -13283,35 +13633,6 @@ def create_keybinds_tab():
             dpg.add_text("Key or mouse button to toggle anti-AFK on/off")
         ALL_TOOLTIP_TAGS.append("tooltip_anti_afk_toggle_key")
         
-        dpg.add_spacer(height=2)
-        
-        # Cycle triggerbot presets forwards key button
-        with dpg.group(horizontal=True):
-            dpg.add_text("Cycle Triggerbot Presets: Forwards")
-            dpg.add_button(
-                label=f"{Keybinds_Config.get('cycle_triggerbot_presets_forwards_key', '').upper() or 'NONE'}",
-                tag="btn_bind_cycle_triggerbot_presets_forwards_cheat",
-                callback=on_cycle_triggerbot_presets_forwards_key_button,
-                width=150
-            )
-        with dpg.tooltip("btn_bind_cycle_triggerbot_presets_forwards_cheat", tag="tooltip_cycle_triggerbot_presets_forwards_key", show=show_tips):
-            dpg.add_text("Key to cycle through triggerbot presets forwards")
-        ALL_TOOLTIP_TAGS.append("tooltip_cycle_triggerbot_presets_forwards_key")
-        
-        # Cycle triggerbot presets backwards key button
-        with dpg.group(horizontal=True):
-            dpg.add_text("Cycle Triggerbot Presets: Backwards")
-            dpg.add_button(
-                label=f"{Keybinds_Config.get('cycle_triggerbot_presets_backwards_key', '').upper() or 'NONE'}",
-                tag="btn_bind_cycle_triggerbot_presets_backwards_cheat",
-                callback=on_cycle_triggerbot_presets_backwards_key_button,
-                width=150
-            )
-        with dpg.tooltip("btn_bind_cycle_triggerbot_presets_backwards_cheat", tag="tooltip_cycle_triggerbot_presets_backwards_key", show=show_tips):
-            dpg.add_text("Key to cycle through triggerbot presets backwards")
-        ALL_TOOLTIP_TAGS.append("tooltip_cycle_triggerbot_presets_backwards_key")
-
-
 def create_settings_tab_cheat():
     """
     Create the Miscellaneous tab content for cheat window.
@@ -13856,6 +14177,7 @@ def run_window(window_type="loader"):
         start_anti_flash_thread()
         start_fov_changer_thread()
         start_acs_thread()
+        start_recoil_thread()
         start_hitsound_thread()
         # Start bhop if enabled
         if Active_Config.get("bhop_enabled", False):
@@ -13879,8 +14201,6 @@ def run_window(window_type="loader"):
     run_window.exit_key_was_pressed = False
     run_window.aimbot_toggle_key_was_pressed = False
     run_window.anti_afk_toggle_key_was_pressed = False
-    run_window.cycle_triggerbot_presets_forwards_key_was_pressed = False
-    run_window.cycle_triggerbot_presets_backwards_key_was_pressed = False
     
     # =============================================================================
     # MAIN RENDER LOOP
@@ -14069,18 +14389,6 @@ def run_window(window_type="loader"):
                                 dpg.set_item_label("btn_bind_anti_afk_toggle_cheat", "NONE")
                             except:
                                 pass
-                        elif keybind_listener["target"] == "cycle_triggerbot_presets_forwards_key":
-                            Keybinds_Config["cycle_triggerbot_presets_forwards_key"] = "none"
-                            try:
-                                dpg.set_item_label("btn_bind_cycle_triggerbot_presets_forwards_cheat", "NONE")
-                            except:
-                                pass
-                        elif keybind_listener["target"] == "cycle_triggerbot_presets_backwards_key":
-                            Keybinds_Config["cycle_triggerbot_presets_backwards_key"] = "none"
-                            try:
-                                dpg.set_item_label("btn_bind_cycle_triggerbot_presets_backwards_cheat", "NONE")
-                            except:
-                                pass
                     else:
                         # Normal key binding
                         if keybind_listener["target"] == "menu_toggle_key":
@@ -14137,18 +14445,6 @@ def run_window(window_type="loader"):
                                 dpg.set_item_label("btn_bind_anti_afk_toggle_cheat", key_name.upper())
                             except:
                                 pass
-                        elif keybind_listener["target"] == "cycle_triggerbot_presets_forwards_key":
-                            Keybinds_Config["cycle_triggerbot_presets_forwards_key"] = key_name
-                            try:
-                                dpg.set_item_label("btn_bind_cycle_triggerbot_presets_forwards_cheat", key_name.upper())
-                            except:
-                                pass
-                        elif keybind_listener["target"] == "cycle_triggerbot_presets_backwards_key":
-                            Keybinds_Config["cycle_triggerbot_presets_backwards_key"] = key_name
-                            try:
-                                dpg.set_item_label("btn_bind_cycle_triggerbot_presets_backwards_cheat", key_name.upper())
-                            except:
-                                pass
                     
                     # Save keybinds after change
                     save_keybinds()
@@ -14161,8 +14457,6 @@ def run_window(window_type="loader"):
                     run_window.exit_key_was_pressed = True
                     run_window.aimbot_toggle_key_was_pressed = True
                     run_window.anti_afk_toggle_key_was_pressed = True
-                    run_window.cycle_triggerbot_presets_forwards_key_was_pressed = True
-                    run_window.cycle_triggerbot_presets_backwards_key_was_pressed = True
                     break
         
         # Handle menu toggle key for cheat window visibility
@@ -14264,36 +14558,6 @@ def run_window(window_type="loader"):
                             stop_anti_afk_thread()
                         debug_log(f"Anti-AFK toggled: {'ON' if new_anti_afk_state else 'OFF'}", "INFO")
                     run_window.anti_afk_toggle_key_was_pressed = anti_afk_toggle_key_pressed
-        
-        # Handle cycle triggerbot presets forwards key
-        if window_type == "cheat" and not keybind_listener["listening"]:
-            cycle_triggerbot_presets_forwards_key = Keybinds_Config.get("cycle_triggerbot_presets_forwards_key", "").lower()
-            
-            # Skip if keybind is set to "none" or empty
-            if cycle_triggerbot_presets_forwards_key and cycle_triggerbot_presets_forwards_key != "none":
-                cycle_triggerbot_presets_forwards_vk_code = KEY_NAME_TO_VK.get(cycle_triggerbot_presets_forwards_key)
-                
-                if cycle_triggerbot_presets_forwards_vk_code:
-                    cycle_triggerbot_presets_forwards_key_pressed = win32api.GetAsyncKeyState(cycle_triggerbot_presets_forwards_vk_code) & 0x8000
-                    if cycle_triggerbot_presets_forwards_key_pressed and not run_window.cycle_triggerbot_presets_forwards_key_was_pressed:
-                        # Key just pressed - cycle forwards
-                        cycle_triggerbot_preset(1)
-                    run_window.cycle_triggerbot_presets_forwards_key_was_pressed = cycle_triggerbot_presets_forwards_key_pressed
-        
-        # Handle cycle triggerbot presets backwards key
-        if window_type == "cheat" and not keybind_listener["listening"]:
-            cycle_triggerbot_presets_backwards_key = Keybinds_Config.get("cycle_triggerbot_presets_backwards_key", "").lower()
-            
-            # Skip if keybind is set to "none" or empty
-            if cycle_triggerbot_presets_backwards_key and cycle_triggerbot_presets_backwards_key != "none":
-                cycle_triggerbot_presets_backwards_vk_code = KEY_NAME_TO_VK.get(cycle_triggerbot_presets_backwards_key)
-                
-                if cycle_triggerbot_presets_backwards_vk_code:
-                    cycle_triggerbot_presets_backwards_key_pressed = win32api.GetAsyncKeyState(cycle_triggerbot_presets_backwards_vk_code) & 0x8000
-                    if cycle_triggerbot_presets_backwards_key_pressed and not run_window.cycle_triggerbot_presets_backwards_key_was_pressed:
-                        # Key just pressed - cycle backwards
-                        cycle_triggerbot_preset(-1)
-                    run_window.cycle_triggerbot_presets_backwards_key_was_pressed = cycle_triggerbot_presets_backwards_key_pressed
         
         # Exit Key handling (works in both loader and cheat windows)
         exit_key_name = Keybinds_Config.get("exit_key", "f7")
@@ -14516,9 +14780,8 @@ def download_skip_loader_sound_pack():
         try:
             filepath = os.path.join(TEMP_FOLDER, filename)
             urllib.request.urlretrieve(url, filepath)
-            print(f"[SOUNDS] Downloaded {filename}")
         except Exception as e:
-            print(f"[SOUNDS] Failed to download {filename}: {e}")
+            pass
 
 
 def main():
@@ -14595,11 +14858,11 @@ def main():
         # Populate temp sounds used by hitmarker options in cheat mode.
         download_skip_loader_sound_pack()
         # Wait for CS2 to be running
-        print("Waiting for CS2...")
+        debug_log("Waiting for CS2...", "INFO")
         while not is_cs2_running():
             time.sleep(0.5)
         
-        print("CS2 detected. Loading offsets...")
+        debug_log("CS2 detected. Loading offsets...", "INFO")
         
         # Load offsets from GitHub
         if not load_and_initialize_offsets(use_local=False):
