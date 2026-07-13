@@ -9130,7 +9130,6 @@ def create_settings_tab():
             dpg.add_text("If enabled, Debug tab will be visible in the cheat menu")
         ALL_TOOLTIP_TAGS.append("tooltip_show_debug_tab")
         
-        dpg.add_separator()
 
         # Show tooltips option
         dpg.add_checkbox(
@@ -9143,7 +9142,6 @@ def create_settings_tab():
             dpg.add_text("Show tooltips when hovering over options")
         ALL_TOOLTIP_TAGS.append("tooltip_show_tooltips")
         
-        dpg.add_separator()
 
         # Local offsets options
         dpg.add_checkbox(
@@ -9170,7 +9168,6 @@ def create_settings_tab():
             show=loader_settings.get("UseLocalOffsets", False)
         )
 
-        dpg.add_separator()
         
         # Pre-load config option (always show)
         dpg.add_checkbox(
@@ -9277,7 +9274,6 @@ def create_changelog_tab():
         dpg.add_text(" - Added nigger hitsound")
         dpg.add_separator()
         dpg.add_text("V1.0:")
-        dpg.add_separator()
         dpg.add_text("- Temporarily removed RCS")
         dpg.add_text("- Updated head detection")
         dpg.add_text("- Fixed local offset creation")
