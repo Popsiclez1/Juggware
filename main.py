@@ -423,7 +423,7 @@ Default_Config = {
     "current_recoil_preset": "All weapons",
     "recoil_auto_weapon_preset": False,
     "recoil_presets": {},
-    # Auto Crosshair Placement (ACS)
+    # Auto Crosshair Placement (ACP)
     "acs_enabled": False,                   # Enable auto crosshair placement
     "acs_target_bone": "Head",              # Target bone (Head, Neck, Chest, Pelvis)
     "acs_smoothness": 5,                    # Movement smoothness (1-50)
@@ -1338,11 +1338,11 @@ fov_changer_state = {
     "settings": None,           # Current FOV changer settings
 }
 
-# Auto Crosshair Placement (ACS) State
+# Auto Crosshair Placement (ACP) State
 acs_state = {
-    "running": False,           # Whether ACS thread is running
-    "thread": None,             # Reference to ACS thread
-    "settings": None,           # Current ACS settings
+    "running": False,           # Whether ACP thread is running
+    "thread": None,             # Reference to ACP thread
+    "settings": None,           # Current ACP settings
 }
 
 # Hitsound State
@@ -2133,7 +2133,7 @@ def apply_config_to_ui():
             bone = Active_Config.get("aimbot_target_bone", "Head")
             dpg.set_value("combo_aimbot_target_bone", bone)
         
-        # ACS target bone combo (stored as string: "Head", "Neck", etc.)
+        # ACP target bone combo (stored as string: "Head", "Neck", etc.)
         if dpg.does_item_exist("combo_acs_target_bone"):
             bone = Active_Config.get("acs_target_bone", "Head")
             dpg.set_value("combo_acs_target_bone", bone)
@@ -2253,7 +2253,7 @@ def apply_config_to_ui():
         if triggerbot_state.get("settings"):
             triggerbot_state["settings"].update(get_current_triggerbot_settings())
 
-        # ACS (Aim Correction System)
+        # ACP (Auto Crosshair Placement)
         if acs_state.get("settings"):
             acs_state["settings"].update(Active_Config)
         
@@ -5503,7 +5503,7 @@ def render_acs_deadzone_lines(overlay, pm, client, settings):
         if not settings or not isinstance(settings, dict):
             return
         
-        # Check if ACS is enabled and lines should be drawn
+        # Check if ACP is enabled and lines should be drawn
         if not settings.get('acs_enabled', False):
             return
         if not settings.get('acs_draw_deadzone_lines', False):
@@ -5513,7 +5513,7 @@ def render_acs_deadzone_lines(overlay, pm, client, settings):
         always_show = settings.get('acs_always_show_deadzone_lines', False)
         
         if not always_show:
-            # Only show lines while ACS key is held
+            # Only show lines while ACP key is held
             acs_key = Keybinds_Config.get("acs_key", "v").lower()
             if acs_key == "none":
                 return
@@ -5650,7 +5650,7 @@ def render_acs_deadzone_lines(overlay, pm, client, settings):
         line_start_x = (screen_width - line_length) / 2
         line_end_x = line_start_x + line_length
         
-        # Get ACS line color from settings
+        # Get ACP line color from settings
         color = settings.get('acs_line_color', (255, 0, 0))
         if not color or len(color) < 3:
             color = (255, 0, 0)
@@ -5823,7 +5823,7 @@ def esp_overlay_thread():
             # Render Aimbot snaplines (independent of ESP toggle)
             render_aimbot_snaplines(overlay, pm, client, settings)
             
-            # Render ACS deadzone lines (independent of main ESP toggle)
+            # Render ACP deadzone lines (independent of main ESP toggle)
             render_acs_deadzone_lines(overlay, pm, client, settings)
             
             # Draw FPS counter
@@ -7473,7 +7473,7 @@ def update_fov_changer_settings():
 
 
 # =============================================================================
-# AUTO CROSSHAIR PLACEMENT (ACS) THREAD
+# AUTO CROSSHAIR PLACEMENT (ACP) THREAD
 # =============================================================================
 # Background thread for auto crosshair placement functionality.
 # Automatically adjusts vertical aim to target bone level when key is held.
@@ -7484,15 +7484,15 @@ def acs_thread():
     Auto Crosshair Placement thread function - runs in background.
     
     Functionality:
-    1. Check if ACS is enabled
-    2. Check if ACS key is held
+    1. Check if ACP is enabled
+    2. Check if ACP key is held
     3. Find closest enemy target
     4. Adjust vertical aim to match target bone level with smoothing
     5. Respects deadzone - won't adjust if already within deadzone
     """
     global acs_state
     
-    debug_log("[ACS] Thread starting...", "INFO")
+    debug_log("[ACP] Thread starting...", "INFO")
     
     # Wait for ESP overlay to connect to CS2 and provide pm/client
     max_wait = 100  # 10 seconds max wait
@@ -7504,10 +7504,10 @@ def acs_thread():
         wait_count += 1
     
     if not esp_overlay.get("pm") or not esp_overlay.get("client"):
-        debug_log("[ACS] Failed to get pm/client from ESP overlay", "ERROR")
+        debug_log("[ACP] Failed to get pm/client from ESP overlay", "ERROR")
         return
     
-    debug_log("[ACS] Connected to CS2 via ESP overlay", "INFO")
+    debug_log("[ACP] Connected to CS2 via ESP overlay", "INFO")
     
     while acs_state["running"]:
         try:
@@ -7516,18 +7516,18 @@ def acs_thread():
             if not settings:
                 settings = Active_Config.copy()
             
-            # Check if ACS is enabled
+            # Check if ACP is enabled
             if not settings.get("acs_enabled", False):
                 time.sleep(0.01)
                 continue
             
-            # Get ACS key and check if it's held
+            # Get ACP key and check if it's held
             acs_key = Keybinds_Config.get("acs_key", "v").lower()
             if acs_key == "none":
                 time.sleep(0.01)
                 continue
             
-            # Get VK code for ACS key
+            # Get VK code for ACP key
             vk_code = KEY_NAME_TO_VK.get(acs_key, 0)
             if vk_code == 0:
                 time.sleep(0.01)
@@ -7702,17 +7702,17 @@ def acs_thread():
         except Exception as e:
             time.sleep(0.01)
     
-    debug_log("[ACS] Thread stopped", "INFO")
+    debug_log("[ACP] Thread stopped", "INFO")
 
 
 def start_acs_thread():
-    """Start the ACS background thread."""
+    """Start the ACP background thread."""
     global acs_state
     
     if acs_state["running"]:
         return
     
-    debug_log("Starting ACS thread...", "INFO")
+    debug_log("Starting ACP thread...", "INFO")
     
     # Initialize settings from Active_Config
     acs_state["settings"] = Active_Config.copy()
@@ -7722,17 +7722,17 @@ def start_acs_thread():
     acs_state["thread"] = threading.Thread(target=acs_thread, daemon=True)
     acs_state["thread"].start()
     
-    debug_log("ACS thread started", "SUCCESS")
+    debug_log("ACP thread started", "SUCCESS")
 
 
 def stop_acs_thread():
-    """Stop the ACS background thread."""
+    """Stop the ACP background thread."""
     global acs_state
     
     if not acs_state["running"]:
         return
     
-    debug_log("Stopping ACS thread...", "INFO")
+    debug_log("Stopping ACP thread...", "INFO")
     acs_state["running"] = False
     
     # Wait for thread to finish
@@ -7740,7 +7740,7 @@ def stop_acs_thread():
         acs_state["thread"].join(timeout=2.0)
         acs_state["thread"] = None
     
-    debug_log("ACS thread stopped", "SUCCESS")
+    debug_log("ACP thread stopped", "SUCCESS")
 
 
 # =============================================================================
@@ -7951,6 +7951,9 @@ def restore_loader_ui():
     # Show create offsets button if use local offsets is checked
     if dpg.get_value("chk_use_local_offsets"):
         dpg.configure_item("btn_create_offsets", show=True)
+        update_local_offsets_status_ui(True)
+    else:
+        update_local_offsets_status_ui(False)
 
 
 def on_test_clicked():
@@ -7982,6 +7985,7 @@ def on_test_clicked():
     dpg.configure_item("chk_use_local_offsets", show=False)
     dpg.configure_item("tooltip_use_local_offsets", show=False)
     dpg.configure_item("btn_create_offsets", show=False)
+    dpg.configure_item("txt_local_offsets_status", show=False)
     dpg.configure_item("chk_preload_config", show=False)
     dpg.configure_item("tooltip_preload_config", show=False)
     dpg.configure_item("combo_preload_config", show=False)
@@ -8239,6 +8243,12 @@ def on_anti_flash_toggle(sender, value):
         anti_flash_state["settings"]["anti_flash_enabled"] = value
     Active_Config["anti_flash_enabled"] = value
     save_settings()
+
+    if value:
+        start_anti_flash_thread()
+    else:
+        stop_anti_flash_thread()
+
     debug_log(f"Anti-Flash {'enabled' if value else 'disabled'}", "INFO")
 
 
@@ -8445,6 +8455,11 @@ def on_fov_changer_toggle(sender, value):
     # Reset FOV to 90 when disabled
     if not value:
         reset_fov_to_default()
+
+    if value:
+        start_fov_changer_thread()
+    else:
+        stop_fov_changer_thread()
     
     debug_log(f"FOV Changer {'enabled' if value else 'disabled'}", "INFO")
 
@@ -8495,12 +8510,72 @@ def on_show_tooltips_toggle(sender, value):
     debug_log(f"Tooltips {'enabled' if value else 'disabled'}", "INFO")
 
 
+local_offsets_creation_state = {
+    "creating": False,
+}
+
+
+def get_local_offsets_status_label():
+    """Return current local offsets status label for loader UI."""
+    if local_offsets_creation_state.get("creating", False):
+        return "Status: Creating..."
+
+    output_folder = os.path.join(TEMP_FOLDER, "offsets", "output")
+    try:
+        if os.path.isdir(output_folder) and len(os.listdir(output_folder)) > 0:
+            return "Status: Ready"
+    except Exception:
+        pass
+
+    return "Status: Not Created"
+
+
+def get_local_offsets_status_color(status_label):
+    """Return RGB color for local offsets status label."""
+    if status_label == "Status: Ready":
+        return (0, 255, 0)
+    if status_label == "Status: Creating...":
+        return (255, 255, 0)
+    return (255, 0, 0)
+
+
+def set_launch_button_enabled(enabled):
+    """Enable/disable launch button if it exists."""
+    try:
+        if dpg.does_item_exist("btn_launch"):
+            dpg.configure_item("btn_launch", enabled=enabled)
+    except Exception:
+        pass
+
+
+def update_local_offsets_status_ui(show_label):
+    """Update local offsets status text and visibility."""
+    try:
+        if dpg.does_item_exist("txt_local_offsets_status"):
+            status_label = get_local_offsets_status_label()
+            dpg.set_value("txt_local_offsets_status", status_label)
+            dpg.configure_item(
+                "txt_local_offsets_status",
+                show=show_label,
+                color=get_local_offsets_status_color(status_label)
+            )
+    except Exception:
+        pass
+
+
 def on_use_local_offsets_changed(sender, value):
     """
     Handle Use Local Offsets checkbox toggle.
     Shows/hides the Create Offsets button based on checkbox state.
     """
     dpg.configure_item("btn_create_offsets", show=value)
+    update_local_offsets_status_ui(value)
+
+    # Launch must remain unavailable while local offsets are being created.
+    if local_offsets_creation_state.get("creating", False):
+        set_launch_button_enabled(False)
+    else:
+        set_launch_button_enabled(True)
 
 
 def on_create_offsets_clicked():
@@ -8531,7 +8606,10 @@ def on_create_offsets_clicked():
         return
     
     # Disable button immediately to prevent multiple clicks
+    local_offsets_creation_state["creating"] = True
     dpg.configure_item("btn_create_offsets", enabled=False, label="Creating Offsets...")
+    set_launch_button_enabled(False)
+    update_local_offsets_status_ui(dpg.get_value("chk_use_local_offsets") if dpg.does_item_exist("chk_use_local_offsets") else False)
     
     # CS2 is running - start offset creation in background thread
     def create_offsets_thread():
@@ -8615,6 +8693,9 @@ def on_create_offsets_clicked():
             time.sleep(2)
             
             # Step 6: Reset button to original state
+            local_offsets_creation_state["creating"] = False
+            set_launch_button_enabled(True)
+            update_local_offsets_status_ui(dpg.get_value("chk_use_local_offsets") if dpg.does_item_exist("chk_use_local_offsets") else False)
             dpg.configure_item("btn_create_offsets", enabled=True, label="Create Offsets")
             
         except Exception as e:
@@ -8631,6 +8712,9 @@ def on_create_offsets_clicked():
             
             # On error, reset button
             try:
+                local_offsets_creation_state["creating"] = False
+                set_launch_button_enabled(True)
+                update_local_offsets_status_ui(dpg.get_value("chk_use_local_offsets") if dpg.does_item_exist("chk_use_local_offsets") else False)
                 dpg.configure_item("btn_create_offsets", enabled=True, label="Create Offsets")
             except Exception:
                 pass  # Ignore if UI is no longer available
@@ -9046,6 +9130,8 @@ def create_settings_tab():
             dpg.add_text("If enabled, Debug tab will be visible in the cheat menu")
         ALL_TOOLTIP_TAGS.append("tooltip_show_debug_tab")
         
+        dpg.add_separator()
+
         # Show tooltips option
         dpg.add_checkbox(
             label="Show Tooltips",
@@ -9057,10 +9143,13 @@ def create_settings_tab():
             dpg.add_text("Show tooltips when hovering over options")
         ALL_TOOLTIP_TAGS.append("tooltip_show_tooltips")
         
+        dpg.add_separator()
+
         # Local offsets options
         dpg.add_checkbox(
             label="Use Local Offsets", 
             tag="chk_use_local_offsets",
+            default_value=loader_settings.get("UseLocalOffsets", False),
             callback=on_use_local_offsets_changed
         )
         with dpg.tooltip("chk_use_local_offsets", tag="tooltip_use_local_offsets", show=show_tips):
@@ -9072,8 +9161,16 @@ def create_settings_tab():
             label="Create Offsets", 
             tag="btn_create_offsets",
             callback=on_create_offsets_clicked,
-            show=False  # Hidden by default
+            show=loader_settings.get("UseLocalOffsets", False)
         )
+
+        dpg.add_text(
+            get_local_offsets_status_label(),
+            tag="txt_local_offsets_status",
+            show=loader_settings.get("UseLocalOffsets", False)
+        )
+
+        dpg.add_separator()
         
         # Pre-load config option (always show)
         dpg.add_checkbox(
@@ -9151,13 +9248,6 @@ def create_info_tab():
         dpg.add_text("If offsets were last updated before the most recent game update, use local offsets.")
 
         dpg.add_spacer(height=UI_SPACING_SMALL)
-        dpg.add_button(
-            label="Click Here For A Surprise!",
-            tag="btn_info_reveal_image",
-            callback=on_info_reveal_image_clicked,
-        )
-        with dpg.group(tag="group_info_image_container", show=False):
-            dpg.add_spacer(height=0)
 
 
 def create_changelog_tab():
@@ -9165,6 +9255,12 @@ def create_changelog_tab():
     Create the Changelog tab content.
     """
     with dpg.tab(label="Changelog"):
+        dpg.add_separator()
+        dpg.add_text("V1.3:")
+        dpg.add_text("- Reorganized UI")
+        dpg.add_text("- Performance tab updated")
+        dpg.add_text("- Changed menu height/width max to 1500")
+        dpg.add_text("- Added local offset creation status")
         dpg.add_separator()
         dpg.add_text("V1.2:")
         dpg.add_text("- Added auto change weapon preset to triggerbot")
@@ -9427,7 +9523,9 @@ def on_custom_crosshair_toggle(sender, value):
         "slider_custom_crosshair_scale",
         "slider_custom_crosshair_thickness", 
         "combo_custom_crosshair_shape",
-        "chk_crosshair_use_targeting_color"
+        "chk_crosshair_use_targeting_color",
+        "color_custom_crosshair_color",
+        "color_crosshair_targeting"
     ]
     
     show_tips = Active_Config.get("show_tooltips", True)
@@ -9440,7 +9538,9 @@ def on_custom_crosshair_toggle(sender, value):
         "tooltip_custom_crosshair_scale",
         "tooltip_custom_crosshair_thickness",
         "tooltip_custom_crosshair_shape",
-        "tooltip_crosshair_use_targeting_color"
+        "tooltip_crosshair_use_targeting_color",
+        "tooltip_custom_crosshair_color",
+        "tooltip_crosshair_targeting_color"
     ]
     
     for tooltip in tooltip_options:
@@ -10028,6 +10128,12 @@ def on_aimbot_toggle(sender, value):
         aimbot_state["settings"]["aimbot_enabled"] = value
     Active_Config["aimbot_enabled"] = value
     save_settings()
+
+    if value:
+        start_aimbot_thread()
+    else:
+        stop_aimbot_thread()
+
     debug_log(f"Aimbot {'enabled' if value else 'disabled'}", "INFO")
     update_esp_preview()
 
@@ -10342,6 +10448,12 @@ def on_triggerbot_toggle(sender, value):
     set_triggerbot_setting("triggerbot_enabled", value)
     if triggerbot_state["settings"]:
         triggerbot_state["settings"]["triggerbot_enabled"] = value
+
+    if value:
+        start_triggerbot_thread()
+    else:
+        stop_triggerbot_thread()
+
     debug_log(f"Triggerbot {'enabled' if value else 'disabled'}", "INFO")
 
 
@@ -10427,6 +10539,13 @@ def on_triggerbot_preset_change(sender, value):
     save_settings()
     # Update UI to reflect new preset settings
     update_triggerbot_ui_from_preset()
+
+    current_settings = get_current_triggerbot_settings()
+    if current_settings.get("triggerbot_enabled", False):
+        start_triggerbot_thread()
+    else:
+        stop_triggerbot_thread()
+
     debug_log(f"Triggerbot preset changed to: {Active_Config.get('current_triggerbot_preset', value)}", "INFO")
 
 
@@ -10456,6 +10575,13 @@ def on_triggerbot_auto_weapon_preset_toggle(sender, value):
             pass
 
     save_settings()
+
+    current_settings = get_current_triggerbot_settings()
+    if current_settings.get("triggerbot_enabled", False):
+        start_triggerbot_thread()
+    else:
+        stop_triggerbot_thread()
+
     debug_log(f"Triggerbot auto weapon preset {'enabled' if value else 'disabled'}", "INFO")
 
 
@@ -10472,55 +10598,61 @@ def on_triggerbot_key_button():
 
 
 # =============================================================================
-# ACS (AUTO CROSSHAIR PLACEMENT) CALLBACKS
+# ACP (AUTO CROSSHAIR PLACEMENT) CALLBACKS
 # =============================================================================
 
 def on_acs_toggle(sender, value):
-    """Handle ACS enable/disable toggle."""
+    """Handle ACP enable/disable toggle."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_enabled"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_enabled"] = value
     Active_Config["acs_enabled"] = value
     save_settings()
-    debug_log(f"ACS {'enabled' if value else 'disabled'}", "INFO")
+
+    if value:
+        start_acs_thread()
+    else:
+        stop_acs_thread()
+
+    debug_log(f"ACP {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_acs_target_bone_change(sender, value):
-    """Handle ACS target bone dropdown change."""
+    """Handle ACP target bone dropdown change."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_target_bone"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_target_bone"] = value
     Active_Config["acs_target_bone"] = value
     save_settings()
-    debug_log(f"ACS target bone changed to: {value}", "INFO")
+    debug_log(f"ACP target bone changed to: {value}", "INFO")
 
 
 def on_acs_smoothness_change(sender, value):
-    """Handle ACS smoothness slider change."""
+    """Handle ACP smoothness slider change."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_smoothness"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_smoothness"] = value
     Active_Config["acs_smoothness"] = value
     save_settings()
-    debug_log(f"ACS smoothness changed to: {value}", "INFO")
+    debug_log(f"ACP smoothness changed to: {value}", "INFO")
 
 
 def on_acs_deadzone_change(sender, value):
-    """Handle ACS deadzone slider change."""
+    """Handle ACP deadzone slider change."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_deadzone"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_deadzone"] = value
     Active_Config["acs_deadzone"] = value
     save_settings()
-    debug_log(f"ACS deadzone changed to: {value}", "INFO")
+    debug_log(f"ACP deadzone changed to: {value}", "INFO")
 
 
 def on_acs_draw_deadzone_lines_toggle(sender, value):
-    """Handle ACS draw deadzone lines toggle."""
+    """Handle ACP draw deadzone lines toggle."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_draw_deadzone_lines"] = value
     if acs_state["settings"]:
@@ -10535,44 +10667,44 @@ def on_acs_draw_deadzone_lines_toggle(sender, value):
         # Note: Line width and transparency sliders are now in Appearance tab and always visible
     except:
         pass
-    debug_log(f"ACS draw deadzone lines {'enabled' if value else 'disabled'}", "INFO")
+    debug_log(f"ACP draw deadzone lines {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_acs_always_show_deadzone_lines_toggle(sender, value):
-    """Handle ACS always show deadzone lines toggle."""
+    """Handle ACP always show deadzone lines toggle."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_always_show_deadzone_lines"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_always_show_deadzone_lines"] = value
     Active_Config["acs_always_show_deadzone_lines"] = value
     save_settings()
-    debug_log(f"ACS always show deadzone lines {'enabled' if value else 'disabled'}", "INFO")
+    debug_log(f"ACP always show deadzone lines {'enabled' if value else 'disabled'}", "INFO")
 
 
 def on_acs_line_width_change(sender, value):
-    """Handle ACS line width slider change."""
+    """Handle ACP line width slider change."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_line_width"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_line_width"] = value
     Active_Config["acs_line_width"] = value
     save_settings()
-    debug_log(f"ACS line width changed to: {value}", "INFO")
+    debug_log(f"ACP line width changed to: {value}", "INFO")
 
 
 def on_acs_line_transparency_change(sender, value):
-    """Handle ACS line transparency slider change."""
+    """Handle ACP line transparency slider change."""
     if esp_overlay["settings"]:
         esp_overlay["settings"]["acs_line_transparency"] = value
     if acs_state["settings"]:
         acs_state["settings"]["acs_line_transparency"] = value
     Active_Config["acs_line_transparency"] = value
     save_settings()
-    debug_log(f"ACS line transparency changed to: {value}", "INFO")
+    debug_log(f"ACP line transparency changed to: {value}", "INFO")
 
 
 def on_acs_line_color_change(sender, value):
-    """Handle ACS line color change."""
+    """Handle ACP line color change."""
     # Convert from 0-255 list to tuple
     color = (int(value[0] * 255), int(value[1] * 255), int(value[2] * 255))
     if esp_overlay["settings"]:
@@ -10581,7 +10713,7 @@ def on_acs_line_color_change(sender, value):
         acs_state["settings"]["acs_line_color"] = color
     Active_Config["acs_line_color"] = color
     save_settings()
-    debug_log(f"ACS line color changed to: {color}", "INFO")
+    debug_log(f"ACP line color changed to: {color}", "INFO")
 
 
 def on_footstep_esp_color_change(sender, value):
@@ -10597,7 +10729,7 @@ def on_footstep_esp_color_change(sender, value):
 
 
 def on_acs_key_button():
-    """Handle ACS key bind button click."""
+    """Handle ACP key bind button click."""
     global keybind_listener
     keybind_listener["listening"] = True
     keybind_listener["target"] = "acs_key"
@@ -11526,12 +11658,12 @@ def draw_preview_aimbot_fov(settings):
 
 def create_esp_tab():
     """
-    Create the ESP settings tab content with Toggles and Options subtabs.
+    Create the ESP settings tab content with an Overlay subtab.
     """
     with dpg.tab(label="ESP"):
         with dpg.tab_bar():
-            # =========== TOGGLES SUBTAB ===========
-            with dpg.tab(label="Toggles"):
+            # =========== OVERLAY SUBTAB ===========
+            with dpg.tab(label="Overlay"):
                 # Get show_tooltips setting
                 show_tips = Active_Config.get("show_tooltips", True)
                 
@@ -11548,7 +11680,6 @@ def create_esp_tab():
                 
                 dpg.add_separator()
                 
-                # Individual feature toggles - load from Active_Config
                 dpg.add_checkbox(
                     label="Boxes", 
                     default_value=Active_Config.get("box_esp", True),
@@ -11646,15 +11777,12 @@ def create_esp_tab():
                     callback=on_hide_spotted_players_toggle
                 )
                 with dpg.tooltip("chk_hide_spotted_players", tag="tooltip_hide_spotted_players", show=show_tips):
-                    dpg.add_text("Hide ESP elements (boxes, lines, skeleton, name, bars, dot) for spotted players")
+                    dpg.add_text("Hide ESP elements for spotted players")
                 ALL_TOOLTIP_TAGS.append("tooltip_hide_spotted_players")
-            
-            # =========== OPTIONS SUBTAB ===========
-            with dpg.tab(label="Options"):
-                dpg.add_text("ESP Options")
-                dpg.add_separator()
                 
-                # Snap lines position - load from Active_Config
+                dpg.add_separator()
+                dpg.add_text("ESP Options")
+                
                 dpg.add_combo(
                     items=["Bottom", "Top"],
                     default_value=Active_Config.get("lines_position", "Bottom"),
@@ -11666,7 +11794,6 @@ def create_esp_tab():
                     dpg.add_text("Where snaplines originate from")
                 ALL_TOOLTIP_TAGS.append("tooltip_lines_pos")
                 
-                # Antialiasing mode - load from Active_Config
                 dpg.add_combo(
                     items=["None", "2x MSAA", "4x MSAA", "8x MSAA"],
                     default_value=Active_Config.get("antialiasing", "4x MSAA"),
@@ -11679,7 +11806,6 @@ def create_esp_tab():
                     dpg.add_text("Change causes overlay to refresh")
                 ALL_TOOLTIP_TAGS.append("tooltip_antialiasing")
                 
-                # Health position dropdown
                 dpg.add_combo(
                     items=["Vertical Left", "Vertical Right", "Horizontal Above", "Horizontal Below"],
                     default_value=Active_Config.get("health_position", "Vertical Left"),
@@ -11691,7 +11817,6 @@ def create_esp_tab():
                     dpg.add_text("Position of health/armor bars/text relative to player box")
                 ALL_TOOLTIP_TAGS.append("tooltip_health_position")
                 
-                # Healthbar type dropdown (Bars vs Text)
                 dpg.add_combo(
                     items=["Bars", "Text"],
                     default_value=Active_Config.get("healthbar_type", "Bars"),
@@ -11703,7 +11828,6 @@ def create_esp_tab():
                     dpg.add_text("Display health/armor as bars or percentage text")
                 ALL_TOOLTIP_TAGS.append("tooltip_healthbar_type")
                 
-                # Box type dropdown (2D/3D)
                 dpg.add_combo(
                     items=["2D", "3D"],
                     default_value=Active_Config.get("box_type", "2D"),
@@ -11715,11 +11839,10 @@ def create_esp_tab():
                     dpg.add_text("2D: Flat rectangle around player")
                     dpg.add_text("3D: 3D box that rotates with player view")
                 ALL_TOOLTIP_TAGS.append("tooltip_box_type")
-                
+
                 dpg.add_separator()
                 dpg.add_text("ESP Distance Filter")
-                
-                # ESP Distance Filter toggle
+
                 dpg.add_checkbox(
                     label="ESP Distance Filter",
                     default_value=Active_Config.get("esp_distance_filter_enabled", False),
@@ -11729,8 +11852,7 @@ def create_esp_tab():
                 with dpg.tooltip("chk_esp_distance_filter_enabled", tag="tooltip_esp_distance_filter_enabled", show=show_tips):
                     dpg.add_text("Filter ESP based on player distance")
                 ALL_TOOLTIP_TAGS.append("tooltip_esp_distance_filter_enabled")
-                
-                # Filter Mode dropdown (shown when enabled)
+
                 dpg.add_combo(
                     items=["Only Show", "Hide"],
                     default_value=Active_Config.get("esp_distance_filter_mode", "Only Show"),
@@ -11743,8 +11865,7 @@ def create_esp_tab():
                     dpg.add_text("Only Show: display only matching players")
                     dpg.add_text("Hide: hide matching players")
                 ALL_TOOLTIP_TAGS.append("tooltip_esp_distance_filter_mode")
-                
-                # Distance Filter Type dropdown (shown when enabled)
+
                 dpg.add_combo(
                     items=["Further than", "Closer than"],
                     default_value=Active_Config.get("esp_distance_filter_type", "Further than"),
@@ -11756,8 +11877,7 @@ def create_esp_tab():
                 with dpg.tooltip("combo_esp_distance_filter_type", tag="tooltip_esp_distance_filter_type", show=show_tips):
                     dpg.add_text("Filter direction: show players further/closer than distance")
                 ALL_TOOLTIP_TAGS.append("tooltip_esp_distance_filter_type")
-                
-                # Distance slider (shown when enabled)
+
                 dpg.add_slider_float(
                     label="Distance Value",
                     default_value=Active_Config.get("esp_distance_filter_distance", 25.0),
@@ -11771,6 +11891,176 @@ def create_esp_tab():
                 with dpg.tooltip("slider_esp_distance_filter_distance", tag="tooltip_esp_distance_filter_distance", show=show_tips):
                     dpg.add_text("Distance threshold in meters (5-50)")
                 ALL_TOOLTIP_TAGS.append("tooltip_esp_distance_filter_distance")
+            
+            # =========== APPEARANCE SUBTAB ===========
+            with dpg.tab(label="Appearance"):
+                with dpg.tab_bar():
+                    with dpg.tab(label="Colors"):
+                        dpg.add_text("Box Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Enemy Boxes",
+                            default_value=get_color_for_picker("enemy_box_color", (196, 30, 58)),
+                            no_alpha=True,
+                            callback=on_enemy_box_color_change,
+                            tag="color_enemy_box"
+                        )
+                        dpg.add_color_edit(
+                            label="Team Boxes",
+                            default_value=get_color_for_picker("team_box_color", (71, 167, 106)),
+                            no_alpha=True,
+                            callback=on_team_box_color_change,
+                            tag="color_team_box"
+                        )
+                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                        dpg.add_text("Snapline Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Enemy Snaplines",
+                            default_value=get_color_for_picker("enemy_snapline_color", (196, 30, 58)),
+                            no_alpha=True,
+                            callback=on_enemy_snapline_color_change,
+                            tag="color_enemy_snapline"
+                        )
+                        dpg.add_color_edit(
+                            label="Team Snaplines",
+                            default_value=get_color_for_picker("team_snapline_color", (71, 167, 106)),
+                            no_alpha=True,
+                            callback=on_team_snapline_color_change,
+                            tag="color_team_snapline"
+                        )
+                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                        dpg.add_text("Skeleton Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Enemy Skeleton",
+                            default_value=get_color_for_picker("enemy_skeleton_color", (255, 255, 255)),
+                            no_alpha=True,
+                            callback=on_enemy_skeleton_color_change,
+                            tag="color_enemy_skeleton"
+                        )
+                        dpg.add_color_edit(
+                            label="Team Skeleton",
+                            default_value=get_color_for_picker("team_skeleton_color", (255, 255, 255)),
+                            no_alpha=True,
+                            callback=on_team_skeleton_color_change,
+                            tag="color_team_skeleton"
+                        )
+                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                        dpg.add_text("Head Dot Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Head Hitbox",
+                            default_value=get_color_for_picker("head_hitbox_color", (255, 0, 0)),
+                            no_alpha=True,
+                            callback=on_head_hitbox_color_change,
+                            tag="color_head_hitbox"
+                        )
+                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                        dpg.add_text("Spotted Status Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Spotted",
+                            default_value=get_color_for_picker("spotted_color", (0, 255, 0)),
+                            no_alpha=True,
+                            callback=on_spotted_color_change,
+                            tag="color_spotted"
+                        )
+                        dpg.add_color_edit(
+                            label="Not Spotted",
+                            default_value=get_color_for_picker("not_spotted_color", (255, 0, 0)),
+                            no_alpha=True,
+                            callback=on_not_spotted_color_change,
+                            tag="color_not_spotted"
+                        )
+                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                        dpg.add_text("Footsteps Colors")
+                        dpg.add_separator()
+                        dpg.add_color_edit(
+                            label="Footsteps",
+                            default_value=get_color_for_picker("footstep_esp_color", (255, 255, 255)),
+                            no_alpha=True,
+                            callback=on_footstep_esp_color_change,
+                            tag="color_footstep_esp"
+                        )
+                    with dpg.tab(label="Scaling"):
+                        dpg.add_text("Line Thickness")
+                        dpg.add_separator()
+                        dpg.add_slider_float(
+                            label="Box",
+                            default_value=Active_Config.get("box_thickness", 1.5),
+                            min_value=1.0,
+                            max_value=5.0,
+                            tag="slider_box_thickness",
+                            callback=on_box_thickness_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_box_thickness", tag="tooltip_box_thickness", show=show_tips):
+                            dpg.add_text("Thickness of ESP box outlines")
+                        ALL_TOOLTIP_TAGS.append("tooltip_box_thickness")
+                        dpg.add_slider_float(
+                            label="Snaplines",
+                            default_value=Active_Config.get("snapline_thickness", 1.5),
+                            min_value=1.0,
+                            max_value=5.0,
+                            tag="slider_snapline_thickness",
+                            callback=on_snapline_thickness_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_snapline_thickness", tag="tooltip_snapline_thickness", show=show_tips):
+                            dpg.add_text("Thickness of snap lines to players")
+                        ALL_TOOLTIP_TAGS.append("tooltip_snapline_thickness")
+                        dpg.add_slider_float(
+                            label="Skeleton",
+                            default_value=Active_Config.get("skeleton_thickness", 1.5),
+                            min_value=1.0,
+                            max_value=5.0,
+                            tag="slider_skeleton_thickness",
+                            callback=on_skeleton_thickness_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_skeleton_thickness", tag="tooltip_skeleton_thickness", show=show_tips):
+                            dpg.add_text("Thickness of skeleton bone lines")
+                        ALL_TOOLTIP_TAGS.append("tooltip_skeleton_thickness")
+                        dpg.add_separator()
+                        dpg.add_text("Text Size")
+                        dpg.add_separator()
+                        dpg.add_slider_float(
+                            label="Spotted Status",
+                            default_value=Active_Config.get("spotted_text_size", 12.0),
+                            min_value=8.0,
+                            max_value=24.0,
+                            tag="slider_spotted_text_size",
+                            callback=on_spotted_text_size_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_spotted_text_size", tag="tooltip_spotted_text_size", show=show_tips):
+                            dpg.add_text("Font size for spotted status text")
+                        ALL_TOOLTIP_TAGS.append("tooltip_spotted_text_size")
+                        dpg.add_slider_float(
+                            label="Nickname",
+                            default_value=Active_Config.get("name_text_size", 14.0),
+                            min_value=8.0,
+                            max_value=24.0,
+                            tag="slider_name_text_size",
+                            callback=on_name_text_size_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_name_text_size", tag="tooltip_name_text_size", show=show_tips):
+                            dpg.add_text("Font size for player nickname text")
+                        ALL_TOOLTIP_TAGS.append("tooltip_name_text_size")
+                        dpg.add_slider_float(
+                            label="Health",
+                            default_value=Active_Config.get("health_text_size", 12.0),
+                            min_value=8.0,
+                            max_value=24.0,
+                            tag="slider_health_text_size",
+                            callback=on_health_text_size_change,
+                            format="%.1f"
+                        )
+                        with dpg.tooltip("slider_health_text_size", tag="tooltip_health_text_size", show=show_tips):
+                            dpg.add_text("Font size for health and shield percentage text")
+                        ALL_TOOLTIP_TAGS.append("tooltip_health_text_size")
             
             # =========== RADAR SUBTAB ===========
             with dpg.tab(label="Radar"):
@@ -11876,20 +12166,59 @@ def create_esp_tab():
                 with dpg.tooltip("slider_radar_y", tag="tooltip_radar_y", show=show_tips):
                     dpg.add_text("Y offset from screen center (negative = up, positive = down). Range keeps radar fully visible.")
                 ALL_TOOLTIP_TAGS.append("tooltip_radar_y")
-            
-            # =========== PREVIEW SUBTAB ===========
-            with dpg.tab(label="Preview"):
-                dpg.add_text("ESP Preview (Experimental)")
-                dpg.add_separator()
-                
-                # Create a drawing canvas for ESP preview
-                with dpg.drawlist(width=400, height=300, tag="esp_preview_canvas"):
-                    # Background
-                    dpg.draw_rectangle((0, 0), (400, 300), color=(20, 20, 20), fill=True)
-                    
-                    # Draw initial preview
-                    update_esp_preview()
 
+                dpg.add_separator()
+                dpg.add_text("Radar Colors")
+                dpg.add_separator()
+
+                dpg.add_color_edit(
+                    label="Background Color",
+                    default_value=get_color_for_picker("radar_bg_color", (0, 0, 0)),
+                    no_alpha=True,
+                    callback=on_radar_bg_color_change,
+                    tag="color_radar_bg"
+                )
+
+                dpg.add_color_edit(
+                    label="Border Color",
+                    default_value=get_color_for_picker("radar_border_color", (128, 128, 128)),
+                    no_alpha=True,
+                    callback=on_radar_border_color_change,
+                    tag="color_radar_border"
+                )
+
+                dpg.add_color_edit(
+                    label="Crosshair Color",
+                    default_value=get_color_for_picker("radar_crosshair_color", (77, 77, 77)),
+                    no_alpha=True,
+                    callback=on_radar_crosshair_color_change,
+                    tag="color_radar_crosshair"
+                )
+
+                dpg.add_color_edit(
+                    label="Player Color",
+                    default_value=get_color_for_picker("radar_player_color", (255, 255, 255)),
+                    no_alpha=True,
+                    callback=on_radar_player_color_change,
+                    tag="color_radar_player"
+                )
+
+                dpg.add_color_edit(
+                    label="Enemy Color",
+                    default_value=get_color_for_picker("radar_enemy_color", (255, 0, 0)),
+                    no_alpha=True,
+                    callback=on_radar_enemy_color_change,
+                    tag="color_radar_enemy"
+                )
+
+                dpg.add_color_edit(
+                    label="Team Color",
+                    default_value=get_color_for_picker("radar_team_color", (0, 255, 0)),
+                    no_alpha=True,
+                    callback=on_radar_team_color_change,
+                    tag="color_radar_team"
+                )
+            
 
 def get_color_for_picker(key, default):
     """
@@ -12088,6 +12417,121 @@ def create_aimbot_tab():
                 with dpg.tooltip("chk_aimbot_snaplines", tag="tooltip_aimbot_snaplines", show=show_tips):
                     dpg.add_text("Draw lines from center of screen to aimbot targets")
                 ALL_TOOLTIP_TAGS.append("tooltip_aimbot_snaplines")
+
+                dpg.add_color_edit(
+                    label="Radius Color",
+                    default_value=get_color_for_picker("aimbot_radius_color", (255, 0, 0)),
+                    no_alpha=True,
+                    callback=on_aimbot_radius_color_change,
+                    tag="color_aimbot_radius"
+                )
+                with dpg.tooltip("color_aimbot_radius", tag="tooltip_aimbot_radius_color", show=show_tips):
+                    dpg.add_text("Color of the aimbot FOV radius circle")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_radius_color")
+
+                dpg.add_color_edit(
+                    label="Deadzone Color",
+                    default_value=get_color_for_picker("aimbot_deadzone_color", (255, 255, 0)),
+                    no_alpha=True,
+                    callback=on_aimbot_deadzone_color_change,
+                    tag="color_aimbot_deadzone"
+                )
+                with dpg.tooltip("color_aimbot_deadzone", tag="tooltip_aimbot_deadzone_color", show=show_tips):
+                    dpg.add_text("Color of the aimbot deadzone circle")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_deadzone_color")
+
+                dpg.add_color_edit(
+                    label="Targeting Radius Color",
+                    default_value=get_color_for_picker("aimbot_targeting_radius_color", (0, 255, 0)),
+                    no_alpha=True,
+                    callback=on_aimbot_targeting_radius_color_change,
+                    tag="color_aimbot_targeting_radius"
+                )
+                with dpg.tooltip("color_aimbot_targeting_radius", tag="tooltip_aimbot_targeting_radius_color", show=show_tips):
+                    dpg.add_text("Color of the targeted radius circle")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_targeting_radius_color")
+
+                dpg.add_color_edit(
+                    label="Targeting Deadzone Color",
+                    default_value=get_color_for_picker("aimbot_targeting_deadzone_color", (0, 0, 255)),
+                    no_alpha=True,
+                    callback=on_aimbot_targeting_deadzone_color_change,
+                    tag="color_aimbot_targeting_deadzone"
+                )
+                with dpg.tooltip("color_aimbot_targeting_deadzone", tag="tooltip_aimbot_targeting_deadzone_color", show=show_tips):
+                    dpg.add_text("Color of the targeted deadzone circle")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_targeting_deadzone_color")
+
+                dpg.add_color_edit(
+                    label="Snapline Color",
+                    default_value=get_color_for_picker("aimbot_snapline_color", (255, 255, 255)),
+                    no_alpha=True,
+                    callback=on_aimbot_snapline_color_change,
+                    tag="color_aimbot_snapline"
+                )
+                with dpg.tooltip("color_aimbot_snapline", tag="tooltip_aimbot_snapline_color", show=show_tips):
+                    dpg.add_text("Color of aimbot snaplines")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_snapline_color")
+
+                dpg.add_slider_int(
+                    label="Radius Transparency",
+                    default_value=Active_Config.get("aimbot_radius_transparency", 180),
+                    min_value=0,
+                    max_value=255,
+                    tag="slider_aimbot_radius_transparency",
+                    callback=on_aimbot_radius_transparency_change
+                )
+                with dpg.tooltip("slider_aimbot_radius_transparency", tag="tooltip_aimbot_radius_transparency", show=show_tips):
+                    dpg.add_text("Transparency of the FOV radius circle (0 = invisible, 255 = solid)")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_radius_transparency")
+
+                dpg.add_slider_int(
+                    label="Deadzone Transparency",
+                    default_value=Active_Config.get("aimbot_deadzone_transparency", 180),
+                    min_value=0,
+                    max_value=255,
+                    tag="slider_aimbot_deadzone_transparency",
+                    callback=on_aimbot_deadzone_transparency_change
+                )
+                with dpg.tooltip("slider_aimbot_deadzone_transparency", tag="tooltip_aimbot_deadzone_transparency", show=show_tips):
+                    dpg.add_text("Transparency of the deadzone circle (0 = invisible, 255 = solid)")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_deadzone_transparency")
+
+                dpg.add_slider_float(
+                    label="Radius Thickness",
+                    default_value=Active_Config.get("aimbot_radius_thickness", 2.0),
+                    min_value=0.5,
+                    max_value=10.0,
+                    tag="slider_aimbot_radius_thickness",
+                    callback=on_aimbot_radius_thickness_change
+                )
+                with dpg.tooltip("slider_aimbot_radius_thickness", tag="tooltip_aimbot_radius_thickness", show=show_tips):
+                    dpg.add_text("Thickness of the FOV radius circle outline")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_radius_thickness")
+
+                dpg.add_slider_float(
+                    label="Deadzone Thickness",
+                    default_value=Active_Config.get("aimbot_deadzone_thickness", 1.5),
+                    min_value=0.5,
+                    max_value=10.0,
+                    tag="slider_aimbot_deadzone_thickness",
+                    callback=on_aimbot_deadzone_thickness_change
+                )
+                with dpg.tooltip("slider_aimbot_deadzone_thickness", tag="tooltip_aimbot_deadzone_thickness", show=show_tips):
+                    dpg.add_text("Thickness of the deadzone circle outline")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_deadzone_thickness")
+
+                dpg.add_slider_float(
+                    label="Snapline Thickness",
+                    default_value=Active_Config.get("aimbot_snapline_thickness", 2.0),
+                    min_value=0.5,
+                    max_value=10.0,
+                    tag="slider_aimbot_snapline_thickness",
+                    callback=on_aimbot_snapline_thickness_change
+                )
+                with dpg.tooltip("slider_aimbot_snapline_thickness", tag="tooltip_aimbot_snapline_thickness", show=show_tips):
+                    dpg.add_text("Thickness of the aimbot snapline")
+                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_snapline_thickness")
             
             # Triggerbot sub-tab
             with dpg.tab(label="Triggerbot"):
@@ -12221,7 +12665,7 @@ def create_aimbot_tab():
                 dpg.add_text("Auto Crosshair Placement")
                 dpg.add_separator()
                 
-                # Enable ACS
+                # Enable ACP
                 dpg.add_checkbox(
                     label="Enable ACP",
                     default_value=Active_Config.get("acs_enabled", False),
@@ -12300,8 +12744,44 @@ def create_aimbot_tab():
                     show=draw_lines_enabled
                 )
                 with dpg.tooltip("chk_acs_always_show_deadzone_lines", tag="tooltip_acs_always_show_deadzone_lines", show=always_show_tips):
-                    dpg.add_text("Show lines without holding ACS key")
+                    dpg.add_text("Show lines without holding ACP key")
                 ALL_TOOLTIP_TAGS.append("tooltip_acs_always_show_deadzone_lines")
+
+                dpg.add_spacer(height=UI_SPACING_MEDIUM)
+                dpg.add_text("Deadzone Line Appearance")
+                dpg.add_separator()
+
+                dpg.add_color_edit(
+                    label="Deadzone Lines Color",
+                    default_value=get_color_for_picker("acs_line_color", (255, 0, 0)),
+                    no_alpha=True,
+                    callback=on_acs_line_color_change,
+                    tag="color_acs_line"
+                )
+
+                dpg.add_slider_int(
+                    label="Deadzone Line Width",
+                    default_value=Active_Config.get("acs_line_width", 2),
+                    min_value=1,
+                    max_value=10,
+                    tag="slider_acs_line_width",
+                    callback=on_acs_line_width_change
+                )
+                with dpg.tooltip("slider_acs_line_width", tag="tooltip_acs_line_width", show=show_tips):
+                    dpg.add_text("Width of deadzone visualization lines")
+                ALL_TOOLTIP_TAGS.append("tooltip_acs_line_width")
+
+                dpg.add_slider_int(
+                    label="Deadzone Line Transparency",
+                    default_value=Active_Config.get("acs_line_transparency", 80),
+                    min_value=10,
+                    max_value=255,
+                    tag="slider_acs_line_transparency",
+                    callback=on_acs_line_transparency_change
+                )
+                with dpg.tooltip("slider_acs_line_transparency", tag="tooltip_acs_line_transparency", show=show_tips):
+                    dpg.add_text("Transparency of deadzone lines (higher = more visible)")
+                ALL_TOOLTIP_TAGS.append("tooltip_acs_line_transparency")
             
             # Recoil sub-tab
             with dpg.tab(label="Recoil"):
@@ -12385,559 +12865,165 @@ def create_colors_tab():
     show_tips = Active_Config.get("show_tooltips", True)
     
     with dpg.tab(label="Appearance"):
-        # Nested tab bar for color sub-categories
-        with dpg.tab_bar():
-            # Menu Colors sub-tab
-            with dpg.tab(label="Menu"):
-                dpg.add_text("UI Theme")
-                dpg.add_separator()
-                
-                # Get list of colorway names
-                colorway_names = list(UI_COLORWAYS.keys())
-                current_colorway = Active_Config.get("menu_colorway", "Default")
-                
-                dpg.add_combo(
-                    label="Colorway",
-                    items=colorway_names,
-                    default_value=current_colorway,
-                    callback=on_colorway_change,
-                    tag="combo_colorway",
-                    width=200
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_SMALL)
-                
-                # Font selection dropdown
-                font_names = list(MENU_FONTS.keys())
-                current_font = Active_Config.get("menu_font", "Default")
-                
-                dpg.add_combo(
-                    label="Font",
-                    items=font_names,
-                    default_value=current_font,
-                    callback=on_font_change,
-                    tag="combo_font",
-                    width=200
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Window Size")
-                dpg.add_separator()
-                
-                # Window Width Slider
-                current_width = Active_Config.get("window_width", 600)
-                dpg.add_slider_int(
-                    label="Width",
-                    default_value=current_width,
-                    min_value=400,
-                    max_value=1200,
-                    callback=on_window_width_change,
-                    tag="slider_window_width",
-                    width=200
-                )
-                
-                # Window Height Slider
-                current_height = Active_Config.get("window_height", 400)
-                dpg.add_slider_int(
-                    label="Height",
-                    default_value=current_height,
-                    min_value=300,
-                    max_value=800,
-                    callback=on_window_height_change,
-                    tag="slider_window_height",
-                    width=200
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Window Transparency")
-                dpg.add_separator()
-                
-                # Menu Transparency Slider
-                current_transparency = Active_Config.get("menu_transparency", 255)
-                dpg.add_slider_int(
-                    label="Menu Transparency",
-                    default_value=current_transparency,
-                    min_value=50,
-                    max_value=255,
-                    callback=on_menu_transparency_change,
-                    tag="slider_menu_transparency",
-                    width=200
-                )
-                with dpg.tooltip("slider_menu_transparency", tag="tooltip_menu_transparency", show=show_tips):
-                    dpg.add_text("Menu window transparency (50 = very transparent, 255 = opaque)")
-                ALL_TOOLTIP_TAGS.append("tooltip_menu_transparency")
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Window Style")
-                dpg.add_separator()
-                
-                # Rounded corners option (Windows 11 only)
-                dpg.add_checkbox(label="Rounded Window Corners", tag="chk_rounded_corners_cheat", default_value=True, callback=on_rounded_corners_changed)
-                with dpg.tooltip("chk_rounded_corners_cheat", tag="tooltip_rounded_corners", show=show_tips):
-                    dpg.add_text("Enable rounded corners on Windows 11")
-                    dpg.add_text("(Has no effect on Windows 10)")
-                ALL_TOOLTIP_TAGS.append("tooltip_rounded_corners")
-            
-            # Overlay Colors sub-tab
-            with dpg.tab(label="Overlay"):
-                # Create sub-tabs for organization
-                with dpg.tab_bar():
-                    # Colors sub-tab
-                    with dpg.tab(label="Colors"):
-                        dpg.add_text("Box Colors")
-                        dpg.add_separator()
-                        
-                        # Enemy Box Color
-                        dpg.add_color_edit(
-                            label="Enemy Boxes",
-                            default_value=get_color_for_picker("enemy_box_color", (196, 30, 58)),
-                            no_alpha=True,
-                            callback=on_enemy_box_color_change,
-                            tag="color_enemy_box"
-                        )
-                        
-                        # Team Box Color
-                        dpg.add_color_edit(
-                            label="Team Boxes",
-                            default_value=get_color_for_picker("team_box_color", (71, 167, 106)),
-                            no_alpha=True,
-                            callback=on_team_box_color_change,
-                            tag="color_team_box"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Snapline Colors")
-                        dpg.add_separator()
-                        
-                        # Enemy Snapline Color
-                        dpg.add_color_edit(
-                            label="Enemy Snaplines",
-                            default_value=get_color_for_picker("enemy_snapline_color", (196, 30, 58)),
-                            no_alpha=True,
-                            callback=on_enemy_snapline_color_change,
-                            tag="color_enemy_snapline"
-                        )
-                        
-                        # Team Snapline Color
-                        dpg.add_color_edit(
-                            label="Team Snaplines",
-                            default_value=get_color_for_picker("team_snapline_color", (71, 167, 106)),
-                            no_alpha=True,
-                            callback=on_team_snapline_color_change,
-                            tag="color_team_snapline"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Skeleton Colors")
-                        dpg.add_separator()
-                        
-                        # Enemy Skeleton Color
-                        dpg.add_color_edit(
-                            label="Enemy Skeleton",
-                            default_value=get_color_for_picker("enemy_skeleton_color", (255, 255, 255)),
-                            no_alpha=True,
-                            callback=on_enemy_skeleton_color_change,
-                            tag="color_enemy_skeleton"
-                        )
-                        
-                        # Team Skeleton Color
-                        dpg.add_color_edit(
-                            label="Team Skeleton",
-                            default_value=get_color_for_picker("team_skeleton_color", (255, 255, 255)),
-                            no_alpha=True,
-                            callback=on_team_skeleton_color_change,
-                            tag="color_team_skeleton"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Head Dot Colors")
-                        dpg.add_separator()
-                        
-                        # Head Hitbox Color
-                        dpg.add_color_edit(
-                            label="Head Hitbox",
-                            default_value=get_color_for_picker("head_hitbox_color", (255, 0, 0)),
-                            no_alpha=True,
-                            callback=on_head_hitbox_color_change,
-                            tag="color_head_hitbox"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Spotted Status Colors")
-                        dpg.add_separator()
-                        
-                        # Spotted Color (when visible)
-                        dpg.add_color_edit(
-                            label="Spotted",
-                            default_value=get_color_for_picker("spotted_color", (0, 255, 0)),
-                            no_alpha=True,
-                            callback=on_spotted_color_change,
-                            tag="color_spotted"
-                        )
-                        
-                        # Not Spotted Color
-                        dpg.add_color_edit(
-                            label="Not Spotted",
-                            default_value=get_color_for_picker("not_spotted_color", (255, 0, 0)),
-                            no_alpha=True,
-                            callback=on_not_spotted_color_change,
-                            tag="color_not_spotted"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Footsteps Colors")
-                        dpg.add_separator()
-                        
-                        # Footstep ESP Color
-                        dpg.add_color_edit(
-                            label="Footsteps",
-                            default_value=get_color_for_picker("footstep_esp_color", (255, 255, 255)),
-                            no_alpha=True,
-                            callback=on_footstep_esp_color_change,
-                            tag="color_footstep_esp"
-                        )
-                        
-                        dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                        dpg.add_text("Crosshair Colors")
-                        dpg.add_separator()
-                        
-                        # Custom Crosshair Color
-                        dpg.add_color_edit(
-                            label="Custom Crosshair",
-                            default_value=get_color_for_picker("custom_crosshair_color", (255, 255, 255)),
-                            no_alpha=True,
-                            callback=on_custom_crosshair_color_change,
-                            tag="color_custom_crosshair_color"
-                        )
-                        
-                        # Crosshair Targeting Color
-                        dpg.add_color_edit(
-                            label="Crosshair Targeting Color",
-                            default_value=get_color_for_picker("crosshair_targeting_color", (255, 0, 0)),
-                            no_alpha=True,
-                            callback=on_crosshair_targeting_color_change,
-                            tag="color_crosshair_targeting"
-                        )
-                    
-                    # Scaling sub-tab
-                    with dpg.tab(label="Scaling"):
-                        dpg.add_text("Scaling Options")
-                        dpg.add_separator()
-                        
-                        dpg.add_text("Line Thickness")
-                        
-                        dpg.add_slider_float(
-                            label="Box",
-                            default_value=Active_Config.get("box_thickness", 1.5),
-                            min_value=1.0,
-                            max_value=5.0,
-                            tag="slider_box_thickness",
-                            callback=on_box_thickness_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_box_thickness", tag="tooltip_box_thickness", show=show_tips):
-                            dpg.add_text("Thickness of ESP box outlines")
-                        ALL_TOOLTIP_TAGS.append("tooltip_box_thickness")
-                        
-                        dpg.add_slider_float(
-                            label="Snaplines",
-                            default_value=Active_Config.get("snapline_thickness", 1.5),
-                            min_value=1.0,
-                            max_value=5.0,
-                            tag="slider_snapline_thickness",
-                            callback=on_snapline_thickness_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_snapline_thickness", tag="tooltip_snapline_thickness", show=show_tips):
-                            dpg.add_text("Thickness of snap lines to players")
-                        ALL_TOOLTIP_TAGS.append("tooltip_snapline_thickness")
-                        
-                        dpg.add_slider_float(
-                            label="Skeleton",
-                            default_value=Active_Config.get("skeleton_thickness", 1.5),
-                            min_value=1.0,
-                            max_value=5.0,
-                            tag="slider_skeleton_thickness",
-                            callback=on_skeleton_thickness_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_skeleton_thickness", tag="tooltip_skeleton_thickness", show=show_tips):
-                            dpg.add_text("Thickness of skeleton bone lines")
-                        ALL_TOOLTIP_TAGS.append("tooltip_skeleton_thickness")
-                        
-                        dpg.add_separator()
-                        dpg.add_text("Text Size")
-                        
-                        dpg.add_slider_float(
-                            label="Spotted Status",
-                            default_value=Active_Config.get("spotted_text_size", 12.0),
-                            min_value=8.0,
-                            max_value=24.0,
-                            tag="slider_spotted_text_size",
-                            callback=on_spotted_text_size_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_spotted_text_size", tag="tooltip_spotted_text_size", show=show_tips):
-                            dpg.add_text("Font size for spotted status text")
-                        ALL_TOOLTIP_TAGS.append("tooltip_spotted_text_size")
-                        
-                        dpg.add_slider_float(
-                            label="Nickname",
-                            default_value=Active_Config.get("name_text_size", 14.0),
-                            min_value=8.0,
-                            max_value=24.0,
-                            tag="slider_name_text_size",
-                            callback=on_name_text_size_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_name_text_size", tag="tooltip_name_text_size", show=show_tips):
-                            dpg.add_text("Font size for player nickname text")
-                        ALL_TOOLTIP_TAGS.append("tooltip_name_text_size")
-                        
-                        dpg.add_slider_float(
-                            label="Health",
-                            default_value=Active_Config.get("health_text_size", 12.0),
-                            min_value=8.0,
-                            max_value=24.0,
-                            tag="slider_health_text_size",
-                            callback=on_health_text_size_change,
-                            format="%.1f"
-                        )
-                        with dpg.tooltip("slider_health_text_size", tag="tooltip_health_text_size", show=show_tips):
-                            dpg.add_text("Font size for health and shield percentage text")
-                        ALL_TOOLTIP_TAGS.append("tooltip_health_text_size")
-            
-            # Radar Colors sub-tab
-            with dpg.tab(label="Radar"):
-                dpg.add_text("Radar Colors")
-                dpg.add_separator()
-                
-                # Radar Background Color
-                dpg.add_color_edit(
-                    label="Background",
-                    default_value=get_color_for_picker("radar_bg_color", (0, 0, 0)),
-                    no_alpha=True,
-                    callback=on_radar_bg_color_change,
-                    tag="color_radar_bg"
-                )
-                
-                # Radar Border Color
-                dpg.add_color_edit(
-                    label="Border",
-                    default_value=get_color_for_picker("radar_border_color", (128, 128, 128)),
-                    no_alpha=True,
-                    callback=on_radar_border_color_change,
-                    tag="color_radar_border"
-                )
-                
-                # Radar Crosshair Color
-                dpg.add_color_edit(
-                    label="Crosshair",
-                    default_value=get_color_for_picker("radar_crosshair_color", (77, 77, 77)),
-                    no_alpha=True,
-                    callback=on_radar_crosshair_color_change,
-                    tag="color_radar_crosshair"
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Entity Colors")
-                dpg.add_separator()
-                
-                # Radar Player Color
-                dpg.add_color_edit(
-                    label="Player Dot",
-                    default_value=get_color_for_picker("radar_player_color", (255, 255, 255)),
-                    no_alpha=True,
-                    callback=on_radar_player_color_change,
-                    tag="color_radar_player"
-                )
-                
-                # Radar Enemy Color
-                dpg.add_color_edit(
-                    label="Enemy Dots",
-                    default_value=get_color_for_picker("radar_enemy_color", (255, 0, 0)),
-                    no_alpha=True,
-                    callback=on_radar_enemy_color_change,
-                    tag="color_radar_enemy"
-                )
-                
-                # Radar Team Color
-                dpg.add_color_edit(
-                    label="Team Dots",
-                    default_value=get_color_for_picker("radar_team_color", (0, 255, 0)),
-                    no_alpha=True,
-                    callback=on_radar_team_color_change,
-                    tag="color_radar_team"
-                )
-            
-            # Aimbot Colors sub-tab
-            with dpg.tab(label="Aimbot"):
-                dpg.add_text("Aimbot Colors")
-                dpg.add_separator()
-                
-                # Aimbot Radius Color
-                dpg.add_color_edit(
-                    label="Radius Circle",
-                    default_value=get_color_for_picker("aimbot_radius_color", (255, 0, 0)),
-                    no_alpha=True,
-                    callback=on_aimbot_radius_color_change,
-                    tag="color_aimbot_radius"
-                )
-                
-                # Aimbot Deadzone Color
-                dpg.add_color_edit(
-                    label="Deadzone Circle",
-                    default_value=get_color_for_picker("aimbot_deadzone_color", (255, 255, 0)),
-                    no_alpha=True,
-                    callback=on_aimbot_deadzone_color_change,
-                    tag="color_aimbot_deadzone"
-                )
-                
-                # Aimbot Targeting Radius Color
-                dpg.add_color_edit(
-                    label="Targeting Radius Circle",
-                    default_value=get_color_for_picker("aimbot_targeting_radius_color", (0, 255, 0)),
-                    no_alpha=True,
-                    callback=on_aimbot_targeting_radius_color_change,
-                    tag="color_aimbot_targeting_radius"
-                )
-                
-                # Aimbot Targeting Deadzone Color
-                dpg.add_color_edit(
-                    label="Targeting Deadzone Circle",
-                    default_value=get_color_for_picker("aimbot_targeting_deadzone_color", (0, 0, 255)),
-                    no_alpha=True,
-                    callback=on_aimbot_targeting_deadzone_color_change,
-                    tag="color_aimbot_targeting_deadzone"
-                )
-                
-                # Aimbot Snapline Color
-                dpg.add_color_edit(
-                    label="Aimbot Snaplines",
-                    default_value=get_color_for_picker("aimbot_snapline_color", (255, 255, 255)),
-                    no_alpha=True,
-                    callback=on_aimbot_snapline_color_change,
-                    tag="color_aimbot_snapline"
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Transparency")
-                dpg.add_separator()
-                
-                # Aimbot radius transparency
-                dpg.add_slider_int(
-                    label="Radius Transparency",
-                    default_value=Active_Config.get("aimbot_radius_transparency", 180),
-                    min_value=0,
-                    max_value=255,
-                    tag="slider_aimbot_radius_transparency",
-                    callback=on_aimbot_radius_transparency_change
-                )
-                with dpg.tooltip("slider_aimbot_radius_transparency", tag="tooltip_aimbot_radius_transparency", show=show_tips):
-                    dpg.add_text("Transparency of the FOV radius circle (0 = invisible, 255 = solid)")
-                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_radius_transparency")
-                
-                # Aimbot deadzone transparency
-                dpg.add_slider_int(
-                    label="Deadzone Transparency",
-                    default_value=Active_Config.get("aimbot_deadzone_transparency", 180),
-                    min_value=0,
-                    max_value=255,
-                    tag="slider_aimbot_deadzone_transparency",
-                    callback=on_aimbot_deadzone_transparency_change
-                )
-                with dpg.tooltip("slider_aimbot_deadzone_transparency", tag="tooltip_aimbot_deadzone_transparency", show=show_tips):
-                    dpg.add_text("Transparency of the deadzone circle (0 = invisible, 255 = solid)")
-                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_deadzone_transparency")
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Thickness")
-                dpg.add_separator()
-                
-                # Aimbot radius thickness
-                dpg.add_slider_float(
-                    label="Radius Thickness",
-                    default_value=Active_Config.get("aimbot_radius_thickness", 2.0),
-                    min_value=0.5,
-                    max_value=10.0,
-                    tag="slider_aimbot_radius_thickness",
-                    callback=on_aimbot_radius_thickness_change
-                )
-                with dpg.tooltip("slider_aimbot_radius_thickness", tag="tooltip_aimbot_radius_thickness", show=show_tips):
-                    dpg.add_text("Thickness of the FOV radius circle outline")
-                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_radius_thickness")
-                
-                # Aimbot deadzone thickness
-                dpg.add_slider_float(
-                    label="Deadzone Thickness",
-                    default_value=Active_Config.get("aimbot_deadzone_thickness", 1.5),
-                    min_value=0.5,
-                    max_value=10.0,
-                    tag="slider_aimbot_deadzone_thickness",
-                    callback=on_aimbot_deadzone_thickness_change
-                )
-                with dpg.tooltip("slider_aimbot_deadzone_thickness", tag="tooltip_aimbot_deadzone_thickness", show=show_tips):
-                    dpg.add_text("Thickness of the deadzone circle outline")
-                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_deadzone_thickness")
-                
-                # Aimbot snapline thickness
-                dpg.add_slider_float(
-                    label="Snapline Thickness",
-                    default_value=Active_Config.get("aimbot_snapline_thickness", 2.0),
-                    min_value=0.5,
-                    max_value=10.0,
-                    tag="slider_aimbot_snapline_thickness",
-                    callback=on_aimbot_snapline_thickness_change
-                )
-                with dpg.tooltip("slider_aimbot_snapline_thickness", tag="tooltip_aimbot_snapline_thickness", show=show_tips):
-                    dpg.add_text("Thickness of the aimbot snapline")
-                ALL_TOOLTIP_TAGS.append("tooltip_aimbot_snapline_thickness")
-            
-            # ACP Colors sub-tab
-            with dpg.tab(label="Auto Crosshair Placement"):
-                dpg.add_text("ACP Colors")
-                dpg.add_separator()
-                
-                # ACS Deadzone Line Color
-                dpg.add_color_edit(
-                    label="Deadzone Lines",
-                    default_value=get_color_for_picker("acs_line_color", (255, 0, 0)),
-                    no_alpha=True,
-                    callback=on_acs_line_color_change,
-                    tag="color_acs_line"
-                )
-                
-                dpg.add_spacer(height=UI_SPACING_MEDIUM)
-                dpg.add_text("Deadzone Line Appearance")
-                dpg.add_separator()
-                
-                # Line width slider
-                dpg.add_slider_int(
-                    label="Line Width",
-                    default_value=Active_Config.get("acs_line_width", 2),
-                    min_value=1,
-                    max_value=10,
-                    tag="slider_acs_line_width",
-                    callback=on_acs_line_width_change
-                )
-                with dpg.tooltip("slider_acs_line_width", tag="tooltip_acs_line_width", show=show_tips):
-                    dpg.add_text("Width of deadzone visualization lines")
-                ALL_TOOLTIP_TAGS.append("tooltip_acs_line_width")
-                
-                # Line transparency slider
-                dpg.add_slider_int(
-                    label="Line Transparency",
-                    default_value=Active_Config.get("acs_line_transparency", 80),
-                    min_value=10,
-                    max_value=255,
-                    tag="slider_acs_line_transparency",
-                    callback=on_acs_line_transparency_change
-                )
-                with dpg.tooltip("slider_acs_line_transparency", tag="tooltip_acs_line_transparency", show=show_tips):
-                    dpg.add_text("Transparency of deadzone lines (higher = more visible)")
-                ALL_TOOLTIP_TAGS.append("tooltip_acs_line_transparency")
+        dpg.add_text("UI Theme")
+        dpg.add_separator()
+        
+        # Get list of colorway names
+        colorway_names = list(UI_COLORWAYS.keys())
+        current_colorway = Active_Config.get("menu_colorway", "Default")
+        
+        dpg.add_combo(
+            label="Colorway",
+            items=colorway_names,
+            default_value=current_colorway,
+            callback=on_colorway_change,
+            tag="combo_colorway",
+            width=200
+        )
+        
+        dpg.add_spacer(height=UI_SPACING_SMALL)
+        
+        # Font selection dropdown
+        font_names = list(MENU_FONTS.keys())
+        current_font = Active_Config.get("menu_font", "Default")
+        
+        dpg.add_combo(
+            label="Font",
+            items=font_names,
+            default_value=current_font,
+            callback=on_font_change,
+            tag="combo_font",
+            width=200
+        )
+        
+        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+        dpg.add_text("Window Size")
+        dpg.add_separator()
+        
+        # Window Width Slider
+        current_width = Active_Config.get("window_width", 600)
+        dpg.add_slider_int(
+            label="Width",
+            default_value=current_width,
+            min_value=400,
+            max_value=1500,
+            callback=on_window_width_change,
+            tag="slider_window_width",
+            width=200
+        )
+        
+        # Window Height Slider
+        current_height = Active_Config.get("window_height", 400)
+        dpg.add_slider_int(
+            label="Height",
+            default_value=current_height,
+            min_value=300,
+            max_value=1500,
+            callback=on_window_height_change,
+            tag="slider_window_height",
+            width=200
+        )
+        
+        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+        dpg.add_text("Window Transparency")
+        dpg.add_separator()
+        
+        # Menu Transparency Slider
+        current_transparency = Active_Config.get("menu_transparency", 255)
+        dpg.add_slider_int(
+            label="Menu Transparency",
+            default_value=current_transparency,
+            min_value=50,
+            max_value=255,
+            callback=on_menu_transparency_change,
+            tag="slider_menu_transparency",
+            width=200
+        )
+        with dpg.tooltip("slider_menu_transparency", tag="tooltip_menu_transparency", show=show_tips):
+            dpg.add_text("Menu window transparency (50 = very transparent, 255 = opaque)")
+        ALL_TOOLTIP_TAGS.append("tooltip_menu_transparency")
+        
+        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+        dpg.add_text("Window Style")
+        dpg.add_separator()
+        
+        # Rounded corners option (Windows 11 only)
+        dpg.add_checkbox(label="Rounded Window Corners", tag="chk_rounded_corners_cheat", default_value=True, callback=on_rounded_corners_changed)
+        with dpg.tooltip("chk_rounded_corners_cheat", tag="tooltip_rounded_corners", show=show_tips):
+            dpg.add_text("Enable rounded corners on Windows 11")
+            dpg.add_text("(Has no effect on Windows 10)")
+        ALL_TOOLTIP_TAGS.append("tooltip_rounded_corners")
 
+        dpg.add_spacer(height=UI_SPACING_MEDIUM)
+        dpg.add_text("Overlay Behavior")
+        dpg.add_separator()
 
+        # Show Overlay FPS toggle
+        dpg.add_checkbox(
+            label="Show Overlay FPS",
+            default_value=Active_Config.get("show_overlay_fps", True),
+            tag="chk_show_overlay_fps",
+            callback=on_show_overlay_fps_toggle
+        )
+        with dpg.tooltip("chk_show_overlay_fps", tag="tooltip_show_overlay_fps", show=show_tips):
+            dpg.add_text("Show FPS counter in the overlay")
+        ALL_TOOLTIP_TAGS.append("tooltip_show_overlay_fps")
+
+        dpg.add_separator()
+
+        # FPS Cap toggle
+        fps_cap_enabled = Active_Config.get("fps_cap_enabled", False)
+        dpg.add_checkbox(
+            label="Cap FPS",
+            default_value=fps_cap_enabled,
+            tag="chk_fps_cap_enabled",
+            callback=on_fps_cap_toggle
+        )
+        with dpg.tooltip("chk_fps_cap_enabled", tag="tooltip_fps_cap_enabled", show=show_tips):
+            dpg.add_text("Limit ESP overlay framerate")
+        ALL_TOOLTIP_TAGS.append("tooltip_fps_cap_enabled")
+
+        # FPS Cap slider (visibility controlled by toggle)
+        fps_slider_show = show_tips and fps_cap_enabled
+        dpg.add_slider_int(
+            label="FPS Limit",
+            default_value=Active_Config.get("fps_cap_value", 144),
+            min_value=30,
+            max_value=500,
+            tag="slider_fps_cap",
+            callback=on_fps_cap_change,
+            show=fps_cap_enabled
+        )
+        with dpg.tooltip("slider_fps_cap", tag="tooltip_fps_cap_slider", show=fps_slider_show):
+            dpg.add_text("Maximum frames per second for overlay")
+        ALL_TOOLTIP_TAGS.append("tooltip_fps_cap_slider")
+
+        dpg.add_separator()
+
+        # Hide on Tab-Out toggle
+        dpg.add_checkbox(
+            label="Hide When Tabbed Out",
+            default_value=Active_Config.get("hide_on_tabout", True),
+            tag="chk_hide_on_tabout",
+            callback=on_hide_on_tabout_toggle
+        )
+        with dpg.tooltip("chk_hide_on_tabout", tag="tooltip_hide_on_tabout", show=show_tips):
+            dpg.add_text("Automatically hide overlay and menu when not focused on CS2")
+        ALL_TOOLTIP_TAGS.append("tooltip_hide_on_tabout")
+
+        dpg.add_separator()
+
+        # Show status labels toggle
+        dpg.add_checkbox(
+            label="Show Status Labels",
+            default_value=Active_Config.get("show_status_labels", True),
+            tag="chk_show_status_labels",
+            callback=on_show_status_labels_toggle
+        )
+        with dpg.tooltip("chk_show_status_labels", tag="tooltip_show_status_labels", show=show_tips):
+            dpg.add_text("Show feature status labels in the overlay")
+        ALL_TOOLTIP_TAGS.append("tooltip_show_status_labels")
+            
 def initialize_color_pickers():
     """
     Initialize color picker values from Active_Config after UI is created.
@@ -13062,7 +13148,7 @@ def create_debug_tab():
     """
     with dpg.tab(label="Debug"):
         # Nested tab bar for sub-tabs
-        with dpg.tab_bar():
+        with dpg.tab_bar(tag="debug_subtabs"):
             # Output sub-tab with mini-terminal
             with dpg.tab(label="Output"):
                 # Mini-terminal for debug output
@@ -13244,9 +13330,9 @@ def create_performance_content():
     dpg.add_text("Performance Metrics")
     dpg.add_separator()
     
-    # CPU and Memory
+    # Script process metrics
     with dpg.group(horizontal=True):
-        dpg.add_text("CPU Usage:")
+        dpg.add_text("PU Usage:")
         dpg.add_text("0.0%", tag="perf_cpu_usage", color=(100, 255, 100))
     
     with dpg.group(horizontal=True):
@@ -13254,8 +13340,8 @@ def create_performance_content():
         dpg.add_text("0 MB", tag="perf_memory_usage", color=(100, 255, 100))
     
     with dpg.group(horizontal=True):
-        dpg.add_text("Disk Usage:")
-        dpg.add_text("0 GB", tag="perf_disk_usage", color=(100, 255, 100))
+        dpg.add_text("Disk I/O:")
+        dpg.add_text("0 MB", tag="perf_disk_usage", color=(100, 255, 100))
     
     with dpg.group(horizontal=True):
         dpg.add_text("ESP FPS:")
@@ -13283,7 +13369,7 @@ def create_performance_content():
     
     # ESP Status
     with dpg.group(horizontal=True):
-        dpg.add_text("ESP:")
+        dpg.add_text("Overlay:")
         dpg.add_text("Stopped", tag="perf_esp_status", color=(255, 100, 100))
     
     # Aimbot Status
@@ -13296,9 +13382,9 @@ def create_performance_content():
         dpg.add_text("Triggerbot:")
         dpg.add_text("Stopped", tag="perf_triggerbot_status", color=(255, 100, 100))
     
-    # ACS Status
+    # ACP Status
     with dpg.group(horizontal=True):
-        dpg.add_text("ACS:")
+        dpg.add_text("ACP:")
         dpg.add_text("Stopped", tag="perf_acs_status", color=(255, 100, 100))
     
     # Anti-Flash Status
@@ -13323,46 +13409,36 @@ def create_performance_content():
     
     dpg.add_spacer(height=UI_SPACING_MEDIUM)
     
-    # Summary Section
-    dpg.add_text("Summary")
-    dpg.add_separator()
-    
-    with dpg.group(horizontal=True):
-        dpg.add_text("Active Features:")
-        dpg.add_text("0", tag="perf_active_features")
-    
-    with dpg.group(horizontal=True):
-        dpg.add_text("Active Threads:")
-        dpg.add_text("0", tag="perf_active_threads")
-    
     dpg.add_spacer(height=UI_SPACING_MEDIUM)
     
-    # Controls
-    with dpg.group(horizontal=True):
-        dpg.add_button(label="Refresh", callback=lambda: update_performance_display())
-        dpg.add_checkbox(label="Auto-refresh", default_value=False, tag="perf_auto_refresh")
+    # Controls removed: performance data auto-refreshes while tab is active
 
 
 def update_performance_display():
     """
     Update all performance metrics in the Performance sub-tab.
-    Called periodically when auto-refresh is enabled.
+    Called periodically while the Performance sub-tab is active.
     """
     try:
-        # Performance Metrics
-        # CPU Usage
-        cpu_percent = psutil.cpu_percent(interval=0)
-        dpg.set_value("perf_cpu_usage", f"{cpu_percent:.1f}%")
-        
-        # Memory Usage
-        memory = psutil.virtual_memory()
-        memory_mb = memory.used / (1024 * 1024)
-        dpg.set_value("perf_memory_usage", f"{memory_mb:.0f} MB")
-        
-        # Disk Usage
-        disk = psutil.disk_usage('/')
-        disk_gb = disk.used / (1024 * 1024 * 1024)
-        dpg.set_value("perf_disk_usage", f"{disk_gb:.1f} GB")
+        # Performance Metrics (script process only)
+        if not hasattr(update_performance_display, "_perf_process"):
+            update_performance_display._perf_process = psutil.Process(os.getpid())
+            # Prime the cpu_percent baseline; first call is expected to be 0.0
+            update_performance_display._perf_process.cpu_percent(interval=None)
+
+        # Process CPU usage percentage
+        process = update_performance_display._perf_process
+        process_cpu_percent = process.cpu_percent(interval=None)
+        dpg.set_value("perf_cpu_usage", f"{process_cpu_percent:.2f}%")
+
+        # Process memory usage (RSS)
+        process_memory_mb = process.memory_info().rss / (1024 * 1024)
+        dpg.set_value("perf_memory_usage", f"{process_memory_mb:.1f} MB")
+
+        # Process disk I/O bytes (cumulative read + write)
+        io_counters = process.io_counters()
+        total_io_mb = (io_counters.read_bytes + io_counters.write_bytes) / (1024 * 1024)
+        dpg.set_value("perf_disk_usage", f"{total_io_mb:.1f} MB")
         
         # ESP FPS
         esp_fps = esp_overlay.get("fps", 0)
@@ -13408,7 +13484,7 @@ def update_performance_display():
         dpg.set_value("perf_triggerbot_status", triggerbot_status)
         dpg.configure_item("perf_triggerbot_status", color=triggerbot_color)
         
-        # ACS Status
+        # ACP Status
         acs_running = acs_state.get("running", False)
         acs_status = "Running" if acs_running else "Stopped"
         acs_color = (100, 255, 100) if acs_running else (255, 100, 100)
@@ -13442,27 +13518,6 @@ def update_performance_display():
         anti_afk_color = (100, 255, 100) if anti_afk_running else (255, 100, 100)
         dpg.set_value("perf_anti_afk_status", anti_afk_status)
         dpg.configure_item("perf_anti_afk_status", color=anti_afk_color)
-        
-        # Summary
-        active_features = sum([
-            esp_running, aimbot_running, triggerbot_running,
-            acs_running, antiflash_running, fov_running, hitsound_running,
-            anti_afk_running
-        ])
-        dpg.set_value("perf_active_features", str(active_features))
-        
-        # Count active threads
-        active_threads = sum([
-            1 if esp_overlay.get("thread") and esp_overlay["thread"].is_alive() else 0,
-            1 if aimbot_state.get("thread") and aimbot_state["thread"].is_alive() else 0,
-            1 if triggerbot_state.get("thread") and triggerbot_state["thread"].is_alive() else 0,
-            1 if acs_state.get("thread") and acs_state["thread"].is_alive() else 0,
-            1 if anti_flash_state.get("thread") and anti_flash_state["thread"].is_alive() else 0,
-            1 if fov_changer_state.get("thread") and fov_changer_state["thread"].is_alive() else 0,
-            1 if hitsound_state.get("thread") and hitsound_state["thread"].is_alive() else 0,
-            1 if anti_afk_state.get("thread") and anti_afk_state["thread"].is_alive() else 0,
-        ])
-        dpg.set_value("perf_active_threads", str(active_threads))
         
     except Exception as e:
         debug_log(f"Failed to update performance display: {str(e)}", "ERROR")
@@ -13547,7 +13602,7 @@ def create_keybinds_tab():
         
         # Aimbot key button
         with dpg.group(horizontal=True):
-            dpg.add_text("Aimbot Key:")
+            dpg.add_text("Aimbot Key (Hold Action):")
             dpg.add_button(
                 label=f"{Keybinds_Config.get('aimbot_key', 'alt').upper()}",
                 tag="btn_bind_aimbot_cheat",
@@ -13562,7 +13617,7 @@ def create_keybinds_tab():
         
         # Triggerbot key button
         with dpg.group(horizontal=True):
-            dpg.add_text("Triggerbot Key:")
+            dpg.add_text("Triggerbot Key (Hold Action):")
             dpg.add_button(
                 label=f"{Keybinds_Config.get('triggerbot_key', 'x').upper()}",
                 tag="btn_bind_triggerbot_cheat",
@@ -13575,9 +13630,9 @@ def create_keybinds_tab():
         
         dpg.add_spacer(height=2)
         
-        # ACS key button
+        # ACP key button
         with dpg.group(horizontal=True):
-            dpg.add_text("ACP Key:")
+            dpg.add_text("ACP Key (Hold Action):")
             dpg.add_button(
                 label=f"{Keybinds_Config.get('acs_key', 'v').upper()}",
                 tag="btn_bind_acs_cheat",
@@ -13592,7 +13647,7 @@ def create_keybinds_tab():
         
         # Bhop key button
         with dpg.group(horizontal=True):
-            dpg.add_text("Bhop Key:")
+            dpg.add_text("Bhop Key: (Hold Action)")
             dpg.add_button(
                 label=f"{Keybinds_Config.get('bhop_key', 'space').upper()}",
                 tag="btn_bind_bhop_cheat",
@@ -13638,302 +13693,250 @@ def create_settings_tab_cheat():
     Create the Miscellaneous tab content for cheat window.
     """
     with dpg.tab(label="Miscellaneous"):
-        # Create sub-tabs for organization
-        with dpg.tab_bar():
-            # Cheat sub-tab (game-related features)
-            with dpg.tab(label="Cheat"):
-                # Get show_tooltips setting
-                show_tips = Active_Config.get("show_tooltips", True)
-                
-                dpg.add_text("Cheat Features")
-                dpg.add_separator()
-                
-                # Targeting type dropdown - load from Active_Config
-                targeting_value = "All Players" if Active_Config.get("targeting_type", 0) == 1 else "Enemies Only"
-                dpg.add_combo(
-                    items=["Enemies Only", "All Players"],
-                    default_value=targeting_value,
-                    label="Targeting",
-                    tag="combo_targeting",
-                    callback=on_targeting_type_change
-                )
-                with dpg.tooltip("combo_targeting", tag="tooltip_targeting", show=show_tips):
-                    dpg.add_text("Target enemies only or include teammates")
-                ALL_TOOLTIP_TAGS.append("tooltip_targeting")
-                
-                dpg.add_separator()
+        # Get show_tooltips setting
+        show_tips = Active_Config.get("show_tooltips", True)
+        
+        dpg.add_text("Miscellaneous Features")
+        dpg.add_separator()
 
-                dpg.add_separator()
-                
-                # Anti Flash toggle
-                dpg.add_checkbox(
-                    label="Anti-Flash",
-                    default_value=Active_Config.get("anti_flash_enabled", False),
-                    tag="chk_anti_flash_enabled",
-                    callback=on_anti_flash_toggle
-                )
-                with dpg.tooltip("chk_anti_flash_enabled", tag="tooltip_anti_flash", show=show_tips):
-                    dpg.add_text("Prevents flashbang effects from blinding you")
-                ALL_TOOLTIP_TAGS.append("tooltip_anti_flash")
-                
-                dpg.add_separator()
-                
-                # FOV Changer toggle
-                fov_enabled = Active_Config.get("fov_changer_enabled", False)
-                dpg.add_checkbox(
-                    label="FOV Changer",
-                    default_value=fov_enabled,
-                    tag="chk_fov_changer_enabled",
-                    callback=on_fov_changer_toggle
-                )
-                with dpg.tooltip("chk_fov_changer_enabled", tag="tooltip_fov_changer", show=show_tips):
-                    dpg.add_text("Modify camera field of view")
-                    dpg.add_text("Higher values give wider view")
-                ALL_TOOLTIP_TAGS.append("tooltip_fov_changer")
-                
-                # FOV value slider (visibility controlled by toggle)
-                dpg.add_slider_int(
-                    label="FOV Value",
-                    default_value=Active_Config.get("fov_value", 90),
-                    min_value=68,
-                    max_value=140,
-                    tag="slider_fov_value",
-                    callback=on_fov_value_change,
-                    show=fov_enabled
-                )
-                fov_slider_show = show_tips and fov_enabled
-                with dpg.tooltip("slider_fov_value", tag="tooltip_fov_value", show=fov_slider_show):
-                    dpg.add_text("Camera field of view (default: 90)")
-                    dpg.add_text("68 = Narrow, 140 = Very Wide")
-                ALL_TOOLTIP_TAGS.append("tooltip_fov_value")
-                
-                dpg.add_separator()
-                
-                # Anti-AFK toggle
-                dpg.add_checkbox(
-                    label="Anti-AFK",
-                    default_value=Active_Config.get("anti_afk_enabled", False),
-                    tag="chk_anti_afk_enabled",
-                    callback=on_anti_afk_toggle
-                )
-                with dpg.tooltip("chk_anti_afk_enabled", tag="tooltip_anti_afk", show=show_tips):
-                    dpg.add_text("Automatically press W,A,S,D keys to prevent AFK kick")
-                ALL_TOOLTIP_TAGS.append("tooltip_anti_afk")
-                
-                # Bunny Hop toggle
-                dpg.add_checkbox(
-                    label="Bunny Hop",
-                    default_value=Active_Config.get("bhop_enabled", False),
-                    tag="chk_bhop_enabled",
-                    callback=on_bhop_toggle
-                )
-                with dpg.tooltip("chk_bhop_enabled", tag="tooltip_bhop", show=show_tips):
-                    dpg.add_text("Hold the configured bhop key to jump automatically")
-                    dpg.add_text("Configure the key in the Keybinds tab")
-                    dpg.add_text("Only works when CS2 is the active window")
-                ALL_TOOLTIP_TAGS.append("tooltip_bhop")
-            
-            # General settings sub-tab
-            with dpg.tab(label="General"):
-                # Get show_tooltips setting
-                show_tips = Active_Config.get("show_tooltips", True)
-                
-                dpg.add_text("General Settings")
-                dpg.add_separator()
-                
-                dpg.add_separator()
-                
-                # Show Overlay FPS toggle
-                dpg.add_checkbox(
-                    label="Show Overlay FPS",
-                    default_value=Active_Config.get("show_overlay_fps", True),
-                    tag="chk_show_overlay_fps",
-                    callback=on_show_overlay_fps_toggle
-                )
-                with dpg.tooltip("chk_show_overlay_fps", tag="tooltip_show_overlay_fps", show=show_tips):
-                    dpg.add_text("Show FPS counter in the overlay")
-                ALL_TOOLTIP_TAGS.append("tooltip_show_overlay_fps")
-                
-                # FPS Cap toggle
-                fps_cap_enabled = Active_Config.get("fps_cap_enabled", False)
-                dpg.add_checkbox(
-                    label="Cap FPS",
-                    default_value=fps_cap_enabled,
-                    tag="chk_fps_cap_enabled",
-                    callback=on_fps_cap_toggle
-                )
-                with dpg.tooltip("chk_fps_cap_enabled", tag="tooltip_fps_cap_enabled", show=show_tips):
-                    dpg.add_text("Limit ESP overlay framerate")
-                ALL_TOOLTIP_TAGS.append("tooltip_fps_cap_enabled")
-                
-                # FPS Cap slider (visibility controlled by toggle)
-                fps_slider_show = show_tips and fps_cap_enabled
-                dpg.add_slider_int(
-                    label="FPS Limit",
-                    default_value=Active_Config.get("fps_cap_value", 144),
-                    min_value=30,
-                    max_value=500,
-                    tag="slider_fps_cap",
-                    callback=on_fps_cap_change,
-                    show=fps_cap_enabled
-                )
-                with dpg.tooltip("slider_fps_cap", tag="tooltip_fps_cap_slider", show=fps_slider_show):
-                    dpg.add_text("Maximum frames per second for overlay")
-                ALL_TOOLTIP_TAGS.append("tooltip_fps_cap_slider")
-                
-                dpg.add_separator()
-                
-                # Hide on Tab-Out toggle
-                dpg.add_checkbox(
-                    label="Hide When Tabbed Out",
-                    default_value=Active_Config.get("hide_on_tabout", True),
-                    tag="chk_hide_on_tabout",
-                    callback=on_hide_on_tabout_toggle
-                )
-                with dpg.tooltip("chk_hide_on_tabout", tag="tooltip_hide_on_tabout", show=show_tips):
-                    dpg.add_text("Automatically hide overlay and menu when not focused on CS2")
-                ALL_TOOLTIP_TAGS.append("tooltip_hide_on_tabout")
-                
-                dpg.add_separator()
-                
-                # Show status labels toggle
-                dpg.add_checkbox(
-                    label="Show Status Labels",
-                    default_value=Active_Config.get("show_status_labels", True),
-                    tag="chk_show_status_labels",
-                    callback=on_show_status_labels_toggle
-                )
-                with dpg.tooltip("chk_show_status_labels", tag="tooltip_show_status_labels", show=show_tips):
-                    dpg.add_text("Show feature status labels in the overlay")
-                ALL_TOOLTIP_TAGS.append("tooltip_show_status_labels")
-                
-                dpg.add_separator()
-                
-                # Custom Crosshair toggle
-                custom_crosshair_enabled = Active_Config.get("custom_crosshair", False)
-                dpg.add_checkbox(
-                    label="Custom Crosshair", 
-                    default_value=custom_crosshair_enabled,
-                    tag="chk_custom_crosshair",
-                    callback=on_custom_crosshair_toggle
-                )
-                with dpg.tooltip("chk_custom_crosshair", tag="tooltip_custom_crosshair", show=show_tips):
-                    dpg.add_text("Show custom crosshair at screen center")
-                    dpg.add_text("Configure options below when enabled")
-                ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair")
-                
-                # Custom crosshair options (visibility controlled by toggle)
-                dpg.add_slider_float(
-                    label="Scale",
-                    default_value=Active_Config.get("custom_crosshair_scale", 1.0),
-                    min_value=0.5,
-                    max_value=3.0,
-                    tag="slider_custom_crosshair_scale",
-                    callback=on_custom_crosshair_scale_change,
-                    format="%.1f",
-                    show=custom_crosshair_enabled
-                )
-                crosshair_scale_show = show_tips and custom_crosshair_enabled
-                with dpg.tooltip("slider_custom_crosshair_scale", tag="tooltip_custom_crosshair_scale", show=crosshair_scale_show):
-                    dpg.add_text("Size multiplier for custom crosshair")
-                ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_scale")
-                
-                dpg.add_slider_float(
-                    label="Thickness",
-                    default_value=Active_Config.get("custom_crosshair_thickness", 2.0),
-                    min_value=1.0,
-                    max_value=5.0,
-                    tag="slider_custom_crosshair_thickness",
-                    callback=on_custom_crosshair_thickness_change,
-                    format="%.1f",
-                    show=custom_crosshair_enabled
-                )
-                crosshair_thickness_show = show_tips and custom_crosshair_enabled
-                with dpg.tooltip("slider_custom_crosshair_thickness", tag="tooltip_custom_crosshair_thickness", show=crosshair_thickness_show):
-                    dpg.add_text("Line thickness for custom crosshair")
-                ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_thickness")
-                
-                dpg.add_combo(
-                    items=["Swastika", "Plus", "X", "Circle", "Dot"],
-                    default_value=Active_Config.get("custom_crosshair_shape", "Swastika"),
-                    label="Shape",
-                    tag="combo_custom_crosshair_shape",
-                    callback=on_custom_crosshair_shape_change,
-                    show=custom_crosshair_enabled
-                )
-                crosshair_shape_show = show_tips and custom_crosshair_enabled
-                with dpg.tooltip("combo_custom_crosshair_shape", tag="tooltip_custom_crosshair_shape", show=crosshair_shape_show):
-                    dpg.add_text("Crosshair shape preset")
-                ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_shape")
-                
-                # Use Targeting Color toggle (only shows when custom crosshair is enabled)
-                dpg.add_checkbox(
-                    label="Use Targeting Color",
-                    default_value=Active_Config.get("crosshair_use_targeting_color", False),
-                    tag="chk_crosshair_use_targeting_color",
-                    callback=on_crosshair_use_targeting_color_toggle,
-                    show=custom_crosshair_enabled
-                )
-                crosshair_targeting_show = show_tips and custom_crosshair_enabled
-                with dpg.tooltip("chk_crosshair_use_targeting_color", tag="tooltip_crosshair_use_targeting_color", show=crosshair_targeting_show):
-                    dpg.add_text("Change crosshair color when aiming at an enemy")
-                    dpg.add_text("Uses same detection as Triggerbot")
-                ALL_TOOLTIP_TAGS.append("tooltip_crosshair_use_targeting_color")
-                
-                # Hitsound toggle
-                hitsound_enabled = Active_Config.get("hitsound_enabled", False)
-                dpg.add_checkbox(
-                    label="Hitsound",
-                    default_value=hitsound_enabled,
-                    tag="chk_hitsound_enabled",
-                    callback=on_hitsound_toggle
-                )
-                with dpg.tooltip("chk_hitsound_enabled", tag="tooltip_hitsound", show=show_tips):
-                    dpg.add_text("Play sound when hitting enemies")
-                    dpg.add_text("Select sound type from dropdown below")
-                ALL_TOOLTIP_TAGS.append("tooltip_hitsound")
-                
-                # Hitsound selection dropdown (visibility controlled by toggle)
-                # Build items list with custom sounds
-                combo_items = ["hitmarker", "criticalhit", "metalhit", "nigger"]
-                custom_sounds = get_custom_sounds()
-                combo_items.extend([f"custom:{sound}" for sound in custom_sounds])
-                
-                dpg.add_combo(
-                    items=combo_items,
-                    default_value=Active_Config.get("hitsound_type", "hitmarker"),
-                    label="Hitsound Type",
-                    tag="combo_hitsound_type",
-                    callback=on_hitsound_type_change,
-                    show=hitsound_enabled
-                )
-                hitsound_combo_show = show_tips and hitsound_enabled
-                with dpg.tooltip("combo_hitsound_type", tag="tooltip_hitsound_type", show=hitsound_combo_show):
-                    dpg.add_text("Select which hitsound to play")
-                    dpg.add_text("Built-in sounds are downloaded automatically")
-                    dpg.add_text("Custom sounds support WAV, MP3, OGG, FLAC")
-                ALL_TOOLTIP_TAGS.append("tooltip_hitsound_type")
-                
-                # Custom sound upload section
-                with dpg.group(horizontal=True, show=hitsound_enabled):
-                    dpg.add_button(
-                        label="Upload Custom Sound",
-                        tag="btn_upload_sound",
-                        callback=lambda: upload_custom_sound(),
-                        width=150
-                    )
-                    dpg.add_checkbox(
-                        label="Overwrite existing",
-                        tag="chk_overwrite_existing",
-                        default_value=False
-                    )
-                
-                with dpg.tooltip("chk_overwrite_existing", tag="tooltip_overwrite_existing", show=show_tips):
-                    dpg.add_text("When enabled, uploading a sound file with the same name will replace the existing file.\nWhen disabled, the new file will be renamed (e.g., sound_1.wav) to avoid overwriting.")
-                ALL_TOOLTIP_TAGS.append("tooltip_overwrite_existing")
-                
-                # Status text for upload feedback
-                dpg.add_text("", tag="text_upload_status", show=False, color=[0, 255, 0])
+        # Targeting type dropdown - load from Active_Config
+        targeting_value = "All Players" if Active_Config.get("targeting_type", 0) == 1 else "Enemies Only"
+        dpg.add_combo(
+            items=["Enemies Only", "All Players"],
+            default_value=targeting_value,
+            label="Targeting",
+            tag="combo_targeting",
+            callback=on_targeting_type_change
+        )
+        with dpg.tooltip("combo_targeting", tag="tooltip_targeting", show=show_tips):
+            dpg.add_text("Target enemies only or include teammates")
+        ALL_TOOLTIP_TAGS.append("tooltip_targeting")
+
+        dpg.add_separator()
+
+        # Anti Flash toggle
+        dpg.add_checkbox(
+            label="Anti-Flash",
+            default_value=Active_Config.get("anti_flash_enabled", False),
+            tag="chk_anti_flash_enabled",
+            callback=on_anti_flash_toggle
+        )
+        with dpg.tooltip("chk_anti_flash_enabled", tag="tooltip_anti_flash", show=show_tips):
+            dpg.add_text("Prevents flashbang effects from blinding you")
+        ALL_TOOLTIP_TAGS.append("tooltip_anti_flash")
+        
+        dpg.add_separator()
+        
+        # FOV Changer toggle
+        fov_enabled = Active_Config.get("fov_changer_enabled", False)
+        dpg.add_checkbox(
+            label="FOV Changer",
+            default_value=fov_enabled,
+            tag="chk_fov_changer_enabled",
+            callback=on_fov_changer_toggle
+        )
+        with dpg.tooltip("chk_fov_changer_enabled", tag="tooltip_fov_changer", show=show_tips):
+            dpg.add_text("Modify camera field of view")
+            dpg.add_text("Higher values give wider view")
+        ALL_TOOLTIP_TAGS.append("tooltip_fov_changer")
+        
+        # FOV value slider (visibility controlled by toggle)
+        dpg.add_slider_int(
+            label="FOV Value",
+            default_value=Active_Config.get("fov_value", 90),
+            min_value=68,
+            max_value=140,
+            tag="slider_fov_value",
+            callback=on_fov_value_change,
+            show=fov_enabled
+        )
+        fov_slider_show = show_tips and fov_enabled
+        with dpg.tooltip("slider_fov_value", tag="tooltip_fov_value", show=fov_slider_show):
+            dpg.add_text("Camera field of view (default: 90)")
+            dpg.add_text("68 = Narrow, 140 = Very Wide")
+        ALL_TOOLTIP_TAGS.append("tooltip_fov_value")
+        
+        dpg.add_separator()
+        
+        # Anti-AFK toggle
+        dpg.add_checkbox(
+            label="Anti-AFK",
+            default_value=Active_Config.get("anti_afk_enabled", False),
+            tag="chk_anti_afk_enabled",
+            callback=on_anti_afk_toggle
+        )
+        with dpg.tooltip("chk_anti_afk_enabled", tag="tooltip_anti_afk", show=show_tips):
+            dpg.add_text("Automatically press W,A,S,D keys to prevent AFK kick")
+        ALL_TOOLTIP_TAGS.append("tooltip_anti_afk")
+        
+        dpg.add_separator()
+
+        # Bunny Hop toggle
+        dpg.add_checkbox(
+            label="Bunny Hop",
+            default_value=Active_Config.get("bhop_enabled", False),
+            tag="chk_bhop_enabled",
+            callback=on_bhop_toggle
+        )
+        with dpg.tooltip("chk_bhop_enabled", tag="tooltip_bhop", show=show_tips):
+            dpg.add_text("Hold the configured bhop key to jump automatically")
+            dpg.add_text("Configure the key in the Keybinds tab")
+            dpg.add_text("Only works when CS2 is the active window")
+        ALL_TOOLTIP_TAGS.append("tooltip_bhop")
+
+        dpg.add_separator()
+        
+        # Custom Crosshair toggle
+        custom_crosshair_enabled = Active_Config.get("custom_crosshair", False)
+        dpg.add_checkbox(
+            label="Custom Crosshair", 
+            default_value=custom_crosshair_enabled,
+            tag="chk_custom_crosshair",
+            callback=on_custom_crosshair_toggle
+        )
+        with dpg.tooltip("chk_custom_crosshair", tag="tooltip_custom_crosshair", show=show_tips):
+            dpg.add_text("Show custom crosshair at screen center")
+            dpg.add_text("Configure options below when enabled")
+        ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair")
+        
+        # Custom crosshair options (visibility controlled by toggle)
+        dpg.add_slider_float(
+            label="Scale",
+            default_value=Active_Config.get("custom_crosshair_scale", 1.0),
+            min_value=0.5,
+            max_value=3.0,
+            tag="slider_custom_crosshair_scale",
+            callback=on_custom_crosshair_scale_change,
+            format="%.1f",
+            show=custom_crosshair_enabled
+        )
+        crosshair_scale_show = show_tips and custom_crosshair_enabled
+        with dpg.tooltip("slider_custom_crosshair_scale", tag="tooltip_custom_crosshair_scale", show=crosshair_scale_show):
+            dpg.add_text("Size multiplier for custom crosshair")
+        ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_scale")
+        
+        dpg.add_slider_float(
+            label="Thickness",
+            default_value=Active_Config.get("custom_crosshair_thickness", 2.0),
+            min_value=1.0,
+            max_value=5.0,
+            tag="slider_custom_crosshair_thickness",
+            callback=on_custom_crosshair_thickness_change,
+            format="%.1f",
+            show=custom_crosshair_enabled
+        )
+        crosshair_thickness_show = show_tips and custom_crosshair_enabled
+        with dpg.tooltip("slider_custom_crosshair_thickness", tag="tooltip_custom_crosshair_thickness", show=crosshair_thickness_show):
+            dpg.add_text("Line thickness for custom crosshair")
+        ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_thickness")
+        
+        dpg.add_combo(
+            items=["Swastika", "Plus", "X", "Circle", "Dot"],
+            default_value=Active_Config.get("custom_crosshair_shape", "Swastika"),
+            label="Shape",
+            tag="combo_custom_crosshair_shape",
+            callback=on_custom_crosshair_shape_change,
+            show=custom_crosshair_enabled
+        )
+        crosshair_shape_show = show_tips and custom_crosshair_enabled
+        with dpg.tooltip("combo_custom_crosshair_shape", tag="tooltip_custom_crosshair_shape", show=crosshair_shape_show):
+            dpg.add_text("Crosshair shape preset")
+        ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_shape")
+        
+        # Use Targeting Color toggle (only shows when custom crosshair is enabled)
+        dpg.add_checkbox(
+            label="Use Targeting Color",
+            default_value=Active_Config.get("crosshair_use_targeting_color", False),
+            tag="chk_crosshair_use_targeting_color",
+            callback=on_crosshair_use_targeting_color_toggle,
+            show=custom_crosshair_enabled
+        )
+        crosshair_targeting_show = show_tips and custom_crosshair_enabled
+        with dpg.tooltip("chk_crosshair_use_targeting_color", tag="tooltip_crosshair_use_targeting_color", show=crosshair_targeting_show):
+            dpg.add_text("Change crosshair color when aiming at an enemy")
+            dpg.add_text("Uses same detection as Triggerbot")
+        ALL_TOOLTIP_TAGS.append("tooltip_crosshair_use_targeting_color")
+
+        dpg.add_color_edit(
+            label="Custom Crosshair Color",
+            default_value=get_color_for_picker("custom_crosshair_color", (255, 255, 255)),
+            no_alpha=True,
+            callback=on_custom_crosshair_color_change,
+            tag="color_custom_crosshair_color",
+            show=custom_crosshair_enabled
+        )
+        with dpg.tooltip("color_custom_crosshair_color", tag="tooltip_custom_crosshair_color", show=crosshair_scale_show):
+            dpg.add_text("Color of the custom crosshair")
+        ALL_TOOLTIP_TAGS.append("tooltip_custom_crosshair_color")
+
+        dpg.add_color_edit(
+            label="Crosshair Targeting Color",
+            default_value=get_color_for_picker("crosshair_targeting_color", (255, 0, 0)),
+            no_alpha=True,
+            callback=on_crosshair_targeting_color_change,
+            tag="color_crosshair_targeting",
+            show=custom_crosshair_enabled
+        )
+        with dpg.tooltip("color_crosshair_targeting", tag="tooltip_crosshair_targeting_color", show=crosshair_scale_show):
+            dpg.add_text("Color when custom crosshair is using targeting mode")
+        ALL_TOOLTIP_TAGS.append("tooltip_crosshair_targeting_color")
+
+        dpg.add_separator()
+
+        # Hitsound toggle
+        hitsound_enabled = Active_Config.get("hitsound_enabled", False)
+        dpg.add_checkbox(
+            label="Hitsound",
+            default_value=hitsound_enabled,
+            tag="chk_hitsound_enabled",
+            callback=on_hitsound_toggle
+        )
+        with dpg.tooltip("chk_hitsound_enabled", tag="tooltip_hitsound", show=show_tips):
+            dpg.add_text("Play sound when hitting enemies")
+            dpg.add_text("Select sound type from dropdown below")
+        ALL_TOOLTIP_TAGS.append("tooltip_hitsound")
+        
+        # Hitsound selection dropdown (visibility controlled by toggle)
+        # Build items list with custom sounds
+        combo_items = ["hitmarker", "criticalhit", "metalhit", "nigger"]
+        custom_sounds = get_custom_sounds()
+        combo_items.extend([f"custom:{sound}" for sound in custom_sounds])
+        
+        dpg.add_combo(
+            items=combo_items,
+            default_value=Active_Config.get("hitsound_type", "hitmarker"),
+            label="Hitsound Type",
+            tag="combo_hitsound_type",
+            callback=on_hitsound_type_change,
+            show=hitsound_enabled
+        )
+        hitsound_combo_show = show_tips and hitsound_enabled
+        with dpg.tooltip("combo_hitsound_type", tag="tooltip_hitsound_type", show=hitsound_combo_show):
+            dpg.add_text("Select which hitsound to play")
+            dpg.add_text("Built-in sounds are downloaded automatically")
+            dpg.add_text("Custom sounds support WAV, MP3, OGG, FLAC")
+        ALL_TOOLTIP_TAGS.append("tooltip_hitsound_type")
+        
+        # Custom sound upload section
+        with dpg.group(horizontal=True, show=hitsound_enabled):
+            dpg.add_button(
+                label="Upload Custom Sound",
+                tag="btn_upload_sound",
+                callback=lambda: upload_custom_sound(),
+                width=150
+            )
+            dpg.add_checkbox(
+                label="Overwrite existing",
+                tag="chk_overwrite_existing",
+                default_value=False
+            )
+        
+        with dpg.tooltip("chk_overwrite_existing", tag="tooltip_overwrite_existing", show=show_tips):
+            dpg.add_text("When enabled, uploading a sound file with the same name will replace the existing file.\nWhen disabled, the new file will be renamed (e.g., sound_1.wav) to avoid overwriting.")
+        ALL_TOOLTIP_TAGS.append("tooltip_overwrite_existing")
+        
+        # Status text for upload feedback
+        dpg.add_text("", tag="text_upload_status", show=False, color=[0, 255, 0])
 
 
 def create_main_window(title, window_type="loader"):
@@ -13965,7 +13968,6 @@ def create_main_window(title, window_type="loader"):
             else:
                 # Cheat window has ESP controls, offsets display, and settings
                 create_esp_tab()
-                update_esp_preview()  # Initialize ESP preview
                 create_aimbot_tab()
                 create_settings_tab_cheat()
                 create_keybinds_tab()
@@ -14172,16 +14174,25 @@ def run_window(window_type="loader"):
     # Start ESP overlay for cheat window
     if window_type == "cheat":
         start_esp_overlay()
-        start_aimbot_thread()
-        start_triggerbot_thread()
-        start_anti_flash_thread()
-        start_fov_changer_thread()
-        start_acs_thread()
+        if Active_Config.get("aimbot_enabled", False):
+            start_aimbot_thread()
+        if get_current_triggerbot_settings().get("triggerbot_enabled", False):
+            start_triggerbot_thread()
+        if Active_Config.get("anti_flash_enabled", False):
+            start_anti_flash_thread()
+        if Active_Config.get("fov_changer_enabled", False):
+            start_fov_changer_thread()
+        if Active_Config.get("acs_enabled", False):
+            start_acs_thread()
         start_recoil_thread()
-        start_hitsound_thread()
+        if Active_Config.get("hitsound_enabled", False):
+            start_hitsound_thread()
         # Start bhop if enabled
         if Active_Config.get("bhop_enabled", False):
             start_bhop_thread()
+        # Start anti-AFK if enabled
+        if Active_Config.get("anti_afk_enabled", False):
+            start_anti_afk_thread()
         # Apply saved colorway theme
         colorway = Active_Config.get("menu_colorway", "Default")
         apply_colorway(colorway)
@@ -14258,14 +14269,22 @@ def run_window(window_type="loader"):
                 update_debug_terminal()
                 terminal_update_counter = 0
         
-        # Update performance display every 30 frames if auto-refresh is enabled and performance tab is visible
+        # Update performance display every 30 frames while Performance tab is active
         if window_type == "cheat":
             try:
-                if dpg.does_item_exist("perf_auto_refresh") and dpg.get_value("perf_auto_refresh") and dpg.is_item_shown("tab_performance"):
+                performance_tab_active = False
+                if dpg.does_item_exist("debug_subtabs"):
+                    performance_tab_active = dpg.get_value("debug_subtabs") == "tab_performance"
+                elif dpg.does_item_exist("tab_performance"):
+                    performance_tab_active = dpg.is_item_shown("tab_performance")
+
+                if performance_tab_active:
                     perf_update_counter += 1
                     if perf_update_counter >= 30:
                         update_performance_display()
                         perf_update_counter = 0
+                else:
+                    perf_update_counter = 0
             except:
                 pass
         
@@ -14522,6 +14541,10 @@ def run_window(window_type="loader"):
                         if esp_overlay["settings"]:
                             esp_overlay["settings"]["aimbot_enabled"] = new_aimbot_state
                         save_settings()
+                        if new_aimbot_state:
+                            start_aimbot_thread()
+                        else:
+                            stop_aimbot_thread()
                         # Update checkbox in UI
                         try:
                             dpg.set_value("chk_aimbot_enabled", new_aimbot_state)
@@ -14674,7 +14697,7 @@ def cleanup_temp_folder():
     # Stop FOV changer thread if running
     stop_fov_changer_thread()
     
-    # Stop ACS thread if running
+    # Stop ACP thread if running
     stop_acs_thread()
     
     # Stop anti-AFK thread if running
