@@ -13328,7 +13328,7 @@ def create_performance_content():
     
     # Script process metrics
     with dpg.group(horizontal=True):
-        dpg.add_text("PU Usage:")
+        dpg.add_text("CPU Usage:")
         dpg.add_text("0.0%", tag="perf_cpu_usage", color=(100, 255, 100))
     
     with dpg.group(horizontal=True):
