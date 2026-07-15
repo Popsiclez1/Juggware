@@ -8,7 +8,7 @@ import time
 import urllib.request
 
 # Launcher constants
-LAUNCHER_VERSION = "1.2"
+LAUNCHER_VERSION = "1.3"
 LAUNCHER_TITLE = "LAUNCHER"
 VERSION_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/LauncherVersion"
 MAIN_SCRIPT_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/main.py"
@@ -173,24 +173,16 @@ from OpenGL.GL import *
     print("[LAUNCHER] All packages are installed.")
 
 
-def launch_main_script(python_exe, script_path, launcher_dir, mode=1):
+def launch_main_script(python_exe, script_path, launcher_dir):
     try:
-        if mode == 2:
-            subprocess.Popen(
-                [python_exe, script_path],
-                cwd=launcher_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                text=True,
-            )
-            temp_files.discard(script_path)
-            print("[LAUNCHER] Debug mode: launched cheat in a separate console window.")
-            print("[LAUNCHER] Closing launcher window.")
-            os._exit(0)
+        launch_env = os.environ.copy()
+        launch_env["JUGGWARE_LAUNCHED_BY_LAUNCHER"] = "1"
 
         process = subprocess.Popen(
             [python_exe, script_path],
             cwd=launcher_dir,
             creationflags=subprocess.CREATE_NO_WINDOW,
+            env=launch_env,
             text=True,
         )
         time.sleep(2)  # Wait a bit to see if it stays running
@@ -216,24 +208,6 @@ def wait_for_enter_only(prompt):
             break
 
 
-def wait_for_mode_selection():
-    """Prompt for launch mode and return 1 (regular) or 2 (debug)."""
-    print("[LAUNCHER] Select mode:")
-    print("[LAUNCHER] Press (1) for Regular Mode")
-    print("[LAUNCHER] Press (2) for Debug Mode")
-
-    while True:
-        key = msvcrt.getwch()
-        if key == "1":
-            print("[LAUNCHER] Selected: Regular Mode")
-            os.system('cls')
-            return 1
-        if key == "2":
-            print("[LAUNCHER] Selected: Debug Mode")
-            os.system('cls')
-            return 2
-
-
 def main():
     set_console_title()
     check_launcher_version()
@@ -253,11 +227,10 @@ def main():
     check_required_packages(python_exe)
 
     os.system('cls')
-    mode = wait_for_mode_selection()
     wait_for_enter_only("[LAUNCHER] Press (ENTER) to start cheat...")
 
     # Run the script from the launcher's directory so main.py creates folders there
-    launch_main_script(python_exe, script_path, launcher_dir, mode=mode)
+    launch_main_script(python_exe, script_path, launcher_dir)
 
 
 if __name__ == "__main__":
