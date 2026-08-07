@@ -39,7 +39,7 @@ title SETUP
 :: -----------------------------
 :: Setup version and version check
 :: -----------------------------
-set "SETUP_VERSION=1.1"
+set "SETUP_VERSION=1.2"
 set "VERSION_URL=https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/SetupVersion"
 set "VERSION_FILE=%TEMP%\setupversion.txt"
 
@@ -133,16 +133,7 @@ if defined INSTALLED_VERSION (
     echo %INSTALLED_VERSION% | findstr /b "3.11" >nul
     if %errorlevel% equ 0 (
         echo.
-        echo [PYTHON SETUP] Update Python packages? Only necessary in case of errors.
-        choice /c YN /n /m "[PYTHON SETUP] Waiting for input... (Y/N)"
-        
-        if errorlevel 2 (
-            echo [PYTHON SETUP] Skipping package installation...
-            timeout /t 2 /nobreak >nul
-            cls
-            goto download_files
-        )
-        
+        echo [PYTHON SETUP] Installing required Python packages for main.py...
         cls
         goto install_libs
     ) else (
@@ -178,29 +169,33 @@ goto install_libs
 :install_libs
 echo [PYTHON SETUP] Installing/updating pip...
 "%PYTHON_EXE%" -m ensurepip --upgrade
-"%PYTHON_EXE%" -m pip install --upgrade pip
+"%PYTHON_EXE%" -m pip install --upgrade pip setuptools wheel
 
-echo [PYTHON SETUP] Installing libraries...
-"%PYTHON_EXE%" -m pip install --upgrade dearpygui
-"%PYTHON_EXE%" -m pip install --upgrade pywin32
-"%PYTHON_EXE%" -m pip install --upgrade psutil
-"%PYTHON_EXE%" -m pip install --upgrade pymem
-"%PYTHON_EXE%" -m pip install --upgrade Pillow
-"%PYTHON_EXE%" -m pip install --upgrade numpy
-"%PYTHON_EXE%" -m pip install --upgrade scipy
-"%PYTHON_EXE%" -m pip install --upgrade pyautogui
-"%PYTHON_EXE%" -m pip install --upgrade pynput
-"%PYTHON_EXE%" -m pip install --upgrade glfw
-"%PYTHON_EXE%" -m pip install --upgrade imgui[glfw]
-"%PYTHON_EXE%" -m pip install --upgrade PyOpenGL
-"%PYTHON_EXE%" -m pip install --upgrade PyOpenGL_accelerate
-"%PYTHON_EXE%" -m pip install --upgrade pygame
-"%PYTHON_EXE%" -m pip install --upgrade requests
+echo [PYTHON SETUP] Installing libraries 
+for %%P in (
+    dearpygui
+    pywin32
+    psutil
+    pymem
+    Pillow
+    numpy
+    scipy
+    pyautogui
+    pynput
+    glfw
+    "imgui[glfw]"
+    PyOpenGL
+    PyOpenGL_accelerate
+    pygame
+    requests
+) do (
+    echo [PYTHON SETUP] Installing %%~P
+    "%PYTHON_EXE%" -m pip install --upgrade "%%~P"
+)
 
-
-:: Verify all packages are installed correctly
+:: Verify all required packages are installed correctly
 echo [PYTHON SETUP] Verifying package installation...
-"%PYTHON_EXE%" -c "import dearpygui.dearpygui; import win32gui; import win32api; import win32con; import win32process; import psutil; import pymem; import PIL; import numpy; import scipy; import pyautogui; import pynput; import glfw; import imgui; import requests; from OpenGL.GL import *; print('All packages verified successfully!')" || (
+"%PYTHON_EXE%" -c "import importlib; modules=['dearpygui.dearpygui','win32gui','win32api','win32con','win32process','psutil','pymem','PIL','numpy','scipy','pyautogui','pynput','glfw','imgui','requests','pygame','OpenGL.GL']; [importlib.import_module(module) for module in modules]; print('All required packages verified successfully!')" || (
     echo [PYTHON SETUP] ERROR: Some packages failed to install correctly!
     echo [PYTHON SETUP] Please run setup.bat again or install packages manually.
     pause
@@ -220,7 +215,7 @@ cls
 :: Get launcher download link from GitHub raw
 :: -----------------------------
 set "LINK_FILE=%TEMP%\launcherlink.txt"
-powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/popsiclez/Juggware/refs/heads/main/launcherdownloadlink' -OutFile '%LINK_FILE%' -UseBasicParsing"
+powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/LauncherDownloadLink' -OutFile '%LINK_FILE%' -UseBasicParsing"
 set /p LAUNCHER_URL=<"%LINK_FILE%"
 del "%LINK_FILE%"
 
