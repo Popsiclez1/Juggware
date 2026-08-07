@@ -8,7 +8,7 @@ import time
 import urllib.request
 
 # Launcher constants
-LAUNCHER_VERSION = "1.3"
+LAUNCHER_VERSION = "1.4"
 LAUNCHER_TITLE = "LAUNCHER"
 VERSION_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/LauncherVersion"
 MAIN_SCRIPT_URL = "https://raw.githubusercontent.com/Popsiclez1/Juggware/refs/heads/main/main.py"
@@ -55,19 +55,16 @@ atexit.register(cleanup_temp_files)
 
 
 def check_launcher_version():
-    print("[LAUNCHER] Checking version...")
+    # print("[LAUNCHER] Checking version...")
     try:
         with urllib.request.urlopen(VERSION_URL) as response:
             remote_version = response.read().decode('utf-8').strip()
         if LAUNCHER_VERSION != remote_version:
-            print("[LAUNCHER] Version outdated...")
-            print("[LAUNCHER] Download newest launcher. (Run setup again)")
-            sys.exit(1)
+            exit_with_pause("[LAUNCHER] Version outdated...\n[LAUNCHER] Download newest launcher. (Run setup again)")
     except Exception as e:
-        print(f"[LAUNCHER] Error checking version: {e}")
-        sys.exit(1)
+        exit_with_pause(f"[LAUNCHER] Error checking version: {e}")
 
-    print("[LAUNCHER] Version is up to date.")
+    # print("[LAUNCHER] Version is up to date.")
 
 
 def find_python_executable():
@@ -94,7 +91,7 @@ def find_python_executable():
 
 
 def check_python_compatibility(python_exe):
-    print("[LAUNCHER] Checking Python compatibility...")
+    # print("[LAUNCHER] Checking Python compatibility...")
     try:
         result = subprocess.run(
             [python_exe, '-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
@@ -103,20 +100,16 @@ def check_python_compatibility(python_exe):
             timeout=10
         )
         if result.returncode != 0:
-            print("[LAUNCHER] Could not verify Python version.")
-            sys.exit(1)
+            exit_with_pause("[LAUNCHER] Could not verify Python version.")
 
         version_text = result.stdout.strip()
         major, minor = map(int, version_text.split('.'))
         if major != SUPPORTED_PYTHON_MAJOR or minor not in SUPPORTED_PYTHON_MINORS:
-            print(f"[LAUNCHER] Incompatible Python version: {version_text}")
-            print("[LAUNCHER] Supported version: 3.11")
-            sys.exit(1)
+            exit_with_pause(f"[LAUNCHER] Incompatible Python version: {version_text}\n[LAUNCHER] Supported version: 3.11")
     except Exception as e:
-        print(f"[LAUNCHER] Error checking Python compatibility: {e}")
-        sys.exit(1)
+        exit_with_pause(f"[LAUNCHER] Error checking Python compatibility: {e}")
 
-    print("[LAUNCHER] Python version is compatible.")
+    # print("[LAUNCHER] Python version is compatible.")
 
 
 def download_main_script(script_path):
@@ -128,8 +121,7 @@ def download_main_script(script_path):
         with open(script_path, 'w', encoding='utf-8') as f:
             f.write(code)
     except Exception as e:
-        print(f"[LAUNCHER] Error downloading cheat: {e}")
-        sys.exit(1)
+        exit_with_pause(f"[LAUNCHER] Error downloading cheat: {e}")
 
 
 def resolve_main_script_path(launcher_dir):
@@ -137,12 +129,12 @@ def resolve_main_script_path(launcher_dir):
     script_path = os.path.join(TEMP_DIR, 'main.py')
     add_temp_file(script_path)
     download_main_script(script_path)
-    print("[LAUNCHER] Using downloaded script.")
+    # print("[LAUNCHER] Using downloaded script.")
     return script_path, True
 
 
 def check_required_packages(python_exe):
-    print("[LAUNCHER] Checking required packages...")
+    # print("[LAUNCHER] Checking required packages...")
     try:
         # All packages that main.py imports
         check_imports = '''
@@ -162,15 +154,11 @@ from OpenGL.GL import *
 '''
         result = subprocess.run([python_exe, '-c', check_imports], capture_output=True, text=True, timeout=15)
         if result.returncode != 0:
-            print(f"[LAUNCHER] Missing required packages.")
-            print(f"[LAUNCHER] Install with: pip install dearpygui pywin32 psutil pymem numpy pyautogui glfw pillow scipy pynput imgui[glfw] PyOpenGL PyOpenGL_accelerate pygame requests")
-            print(f"[LAUNCHER] Error: {result.stderr}")
-            sys.exit(1)
+            exit_with_pause(f"[LAUNCHER] Missing required packages.\n[LAUNCHER] Error: {result.stderr}")
     except Exception as e:
-        print(f"[LAUNCHER] Error checking packages: {e}")
-        sys.exit(1)
+        exit_with_pause(f"[LAUNCHER] Error checking packages: {e}")
 
-    print("[LAUNCHER] All packages are installed.")
+    # print("[LAUNCHER] All packages are installed.")
 
 
 def launch_main_script(python_exe, script_path, launcher_dir):
@@ -195,8 +183,7 @@ def launch_main_script(python_exe, script_path, launcher_dir):
             # Don't cleanup temp file while main.py is running
             temp_files.discard(script_path)
     except Exception as e:
-        print(f"[LAUNCHER] Error running cheat: {e}")
-        sys.exit(1)
+        exit_with_pause(f"[LAUNCHER] Error running cheat: {e}")
 
 
 def wait_for_enter_only(prompt):
@@ -206,6 +193,13 @@ def wait_for_enter_only(prompt):
         key = msvcrt.getwch()
         if key == "\r":
             break
+
+
+def exit_with_pause(message):
+    """Print a message, wait for Enter, then exit with a failure code."""
+    print(message)
+    wait_for_enter_only("[LAUNCHER] Press (ENTER) to exit...")
+    sys.exit(1)
 
 
 def main():
@@ -219,12 +213,13 @@ def main():
 
     python_exe = find_python_executable()
     if not python_exe:
-        print("Error: Could not find Python executable")
-        sys.exit(1)
+        exit_with_pause("[LAUNCHER] Error: Could not find Python executable")
 
     check_python_compatibility(python_exe)
 
     check_required_packages(python_exe)
+
+    
 
     os.system('cls')
     wait_for_enter_only("[LAUNCHER] Press (ENTER) to start cheat...")
